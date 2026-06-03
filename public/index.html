@@ -167,7 +167,13 @@ function badgeClass(role) {
 
 function fmtDate(ts) {
   if (!ts) return '—';
-  return new Date(typeof ts === 'number' ? ts : ts).toLocaleDateString('en-IN');
+  const d = new Date(typeof ts === 'number' ? ts : ts);
+  if (isNaN(d)) return '—';
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const dd = String(d.getDate()).padStart(2,'0');
+  const mm = months[d.getMonth()];
+  const yy = String(d.getFullYear()).slice(-2);
+  return `${dd}-${mm}-${yy}`;
 }
 
 function show(html) { document.getElementById('app').innerHTML = html; }
@@ -256,12 +262,14 @@ function renderDashboard() {
     Admin: [
       {i:'📋',c:'c-blue',  t:'All Inventory',   d:'View & manage devices',       p:'inventory'},
       {i:'⬆️',c:'c-green', t:'Bulk Upload',      d:'Upload devices via Excel',    p:'upload'},
+      {i:'➕',c:'c-teal',  t:'Add Single Device', d:'Add one device manually',    p:'addinventory'},
       {i:'📊',c:'c-purple',t:'Dashboard Stats',  d:'Overview & analytics',        p:'stats'},
       {i:'📝',c:'c-orange',t:'All Requests',     d:'View device requests',        p:'requests'},
       {i:'👥',c:'c-teal',  t:'Manage Users',     d:'Register & manage employees', p:'users'},
       {i:'📁',c:'c-blue',  t:'Reports',          d:'Export Excel/CSV reports',    p:'reports'},
       {i:'🔍',c:'c-red',   t:'Audit Log',        d:'Full activity history',       p:'audit'},
       {i:'⚠️',c:'c-orange',t:'Duplicate Log',    d:'Blocked duplicate entries',   p:'duplog'},
+      {i:'🏆',c:'c-purple',t:'Benchmark Inventory',d:'Competitor devices (restricted)',p:'benchmark'},
     ],
     TL: [
       {i:'✅',c:'c-green', t:'Approve Requests', d:'Review pending requests',     p:'approve'},
@@ -273,8 +281,14 @@ function renderDashboard() {
     InventoryHolder: [
       {i:'📋',c:'c-blue',  t:'All Inventory',    d:'View & manage devices',       p:'inventory'},
       {i:'⬆️',c:'c-green', t:'Bulk Upload',      d:'Upload devices via Excel',    p:'upload'},
+      {i:'➕',c:'c-teal',  t:'Add Single Device', d:'Add one device manually',    p:'addinventory'},
       {i:'✅',c:'c-teal',  t:'Validate Returns', d:'Confirm returned devices',    p:'returns'},
       {i:'📊',c:'c-purple',t:'Stock Overview',   d:'Check availability',          p:'stats'},
+      {i:'🏆',c:'c-purple',t:'Benchmark Inventory',d:'Competitor devices',         p:'benchmark'},
+    ],
+    BenchmarkViewer: [
+      {i:'🏆',c:'c-purple',t:'Benchmark Inventory',d:'Competitor devices',         p:'benchmark'},
+      {i:'📊',c:'c-blue',  t:'Benchmark Stats',  d:'Overview by brand/category',  p:'benchstats'},
     ],
     Employee: [
       {i:'📱',c:'c-blue',  t:'My Devices',       d:'Devices assigned to you',     p:'mydevices'},
@@ -327,7 +341,7 @@ async function renderInventory() {
       <table id="invTbl">
         <thead><tr>
           <th>Brand/Model</th><th>IMEI1</th><th>HW Stage</th>
-          <th>Location</th><th>Status</th><th>Assigned To</th><th>Return Date</th>
+          <th>Location</th><th>Status</th><th>Assigned To</th><th>Return Date</th><th>Photo</th>
         </tr></thead>
         <tbody>${items.length ? items.map(i=>{
           const f=i.fields||{};
@@ -596,8 +610,13 @@ function renderNewRequest() {
         </div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label>Preferred Brand</label><input id="rBrand" placeholder="e.g. Samsung"></div>
-        <div class="form-group"><label>Preferred Model</label><input id="rModel" placeholder="e.g. Galaxy S25"></div>
+        <div class="form-group"><label>Preferred Brand</label>
+          <select id="rBrand">
+            <option value="">Any brand</option>
+            <option>itel</option><option>Tecno</option><option>Infinix</option><option>Oraimo</option><option>Villaon</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Preferred Model</label><input id="rModel" placeholder="e.g. Spark 30"></div>
       </div>
       <div class="form-group"><label>Additional Remarks</label><input id="rRemarks" placeholder="Any other notes..."></div>
       <button class="btn" onclick="submitRequest()">Submit Request</button>
@@ -880,7 +899,418 @@ async function renderDupLog() {
     </div>`);
 }
 
-// ── Router ────────────────────────────────────────────────────────────────────
+// ── Benchmark Inventory ──────────────────────────────────────────────────────
+async function renderBenchmark() {
+  if (!TABLES.BENCHMARK) { show('<div class="empty">Benchmark table not configured yet. Run setup to add it.</div>'); return; }
+  show('<div class="loading">Loading benchmark inventory...</div>');
+  try {
+    const d = await req('GET', '/api/benchmark?pageSize=100');
+    const items = d.items || [];
+    show(`
+      <div class="table-wrap">
+        <div class="table-header">
+          <div class="table-title">🏆 Benchmark Inventory (${items.length})</div>
+          <div class="search-row">
+            <input class="search-input" placeholder="Search brand, model..." oninput="filterTable('benchTbl',this.value)">
+            <select class="filter-select" onchange="filterByCategory('benchTbl',this.value)">
+              <option value="">All Categories</option>
+              <option>Smartphone</option><option>Tablet</option><option>Wearable</option>
+              <option>TWS</option><option>Feature Phone</option><option>Other</option>
+            </select>
+            ${(USER.role==='Admin'||USER.role==='InventoryHolder') ? `<button class="btn btn-sm btn-green" onclick="navigate('benchupload')">⬆ Upload</button>
+              <button class="btn btn-sm" onclick="navigate('benchnew')">+ Add</button>` : ''}
+          </div>
+        </div>
+        <div style="overflow-x:auto">
+        <table id="benchTbl">
+          <thead><tr>
+            <th>Competitor Brand</th><th>Device Model</th><th>Category</th>
+            <th>Serial/IMEI</th><th>Color</th><th>Storage/RAM</th>
+            <th>Location</th><th>Custodian</th><th>Purpose</th><th>Received</th>
+          </tr></thead>
+          <tbody>${items.length ? items.map(i=>`
+            <tr data-cat="${i.category}">
+              <td style="font-weight:500">${i.competitorBrand||'—'}</td>
+              <td>${i.deviceModel||'—'}</td>
+              <td><span class="status-pill pill-assigned">${i.category||'—'}</span></td>
+              <td style="font-family:monospace;font-size:12px">${i.serialImei||'—'}</td>
+              <td>${i.color||'—'}</td>
+              <td>${i.storageRam||'—'}</td>
+              <td>${i.location||'—'}</td>
+              <td>${i.custodian||'—'}</td>
+              <td style="font-size:12px;color:#888">${i.purpose||'—'}</td>
+              <td>${fmtDate(i.receivedDate)}</td>
+            </tr>`).join('') : '<tr><td colspan="10" class="empty">No benchmark devices found</td></tr>'}
+          </tbody>
+        </table>
+        </div>
+      </div>`);
+  } catch(e) {
+    show('<div class="alert alert-error">Could not load benchmark inventory. Table may not be set up yet.</div>');
+  }
+}
+
+function filterByCategory(tableId, s) {
+  const rows = document.querySelectorAll(`#${tableId} tbody tr`);
+  rows.forEach(r => r.style.display = (!s || r.dataset.cat === s) ? '' : 'none');
+}
+
+async function renderBenchStats() {
+  show('<div class="loading">Loading benchmark stats...</div>');
+  try {
+    const d = await req('GET', '/api/benchmark/stats');
+    const s = d.data || {};
+    show(`
+      <div class="page-title">🏆 Benchmark Stats</div>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-label">Total Devices</div><div class="stat-value">${s.total||0}</div></div>
+        <div class="stat-card"><div class="stat-label">Brands Tracked</div><div class="stat-value">${Object.keys(s.byBrand||{}).length}</div></div>
+        <div class="stat-card"><div class="stat-label">Categories</div><div class="stat-value">${Object.keys(s.byCategory||{}).length}</div></div>
+      </div>
+      <div class="grid-2">
+        <div class="form-card"><h3>By Competitor Brand</h3>
+          ${Object.entries(s.byBrand||{}).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0f0">
+              <span style="font-weight:500">${k}</span><strong>${v}</strong>
+            </div>`).join('')||'<div class="empty">No data</div>'}
+        </div>
+        <div class="form-card"><h3>By Category</h3>
+          ${Object.entries(s.byCategory||{}).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0f0">
+              <span>${k}</span><strong>${v}</strong>
+            </div>`).join('')||'<div class="empty">No data</div>'}
+        </div>
+      </div>`);
+  } catch(e) {
+    show('<div class="alert alert-error">Could not load stats.</div>');
+  }
+}
+
+function renderBenchUpload() {
+  show(`
+    <div class="page-title">⬆️ Benchmark Bulk Upload</div>
+    <div class="form-card">
+      <h3>Upload Competitor Devices via Excel</h3>
+      <p style="font-size:13px;color:#666;margin-bottom:16px">
+        Use the <strong>"Benchmark Upload"</strong> sheet in the template. Fill in competitor device data and upload here.
+      </p>
+      <div style="margin-bottom:16px">
+        <a href="/inventory_bulk_upload_template.xlsx" download>
+          <button class="btn btn-outline">📥 Download Template (Benchmark Upload sheet)</button>
+        </a>
+      </div>
+      <div class="upload-zone" id="benchDropZone" onclick="document.getElementById('benchFileInput').click()"
+        ondragover="event.preventDefault();this.classList.add('drag')"
+        ondragleave="this.classList.remove('drag')"
+        ondrop="handleBenchDrop(event)">
+        <div class="upload-icon">🏆</div>
+        <div class="upload-text">Click to select file or drag & drop</div>
+        <div class="upload-sub">Supports .xlsx and .csv — use "Benchmark Upload" sheet</div>
+      </div>
+      <input type="file" id="benchFileInput" accept=".xlsx,.csv" style="display:none" onchange="uploadBenchFile(this.files[0])">
+    </div>
+    <div id="benchUploadResult"></div>`);
+}
+
+function handleBenchDrop(e) {
+  e.preventDefault();
+  document.getElementById('benchDropZone').classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if (f) uploadBenchFile(f);
+}
+
+async function uploadBenchFile(file) {
+  if (!file) return;
+  const res = document.getElementById('benchUploadResult');
+  res.innerHTML = `<div class="loading">⏳ Uploading ${file.name}...</div>`;
+  const fd = new FormData(); fd.append('file', file);
+  try {
+    const d = await req('POST', '/api/benchmark/bulk-upload', fd, true);
+    if (d.success) {
+      const s = d.summary;
+      res.innerHTML = `<div class="form-card"><h3>✅ Upload Complete — ${s.batchId}</h3>
+        <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
+          <div class="stat-card"><div class="stat-label">Total</div><div class="stat-value">${s.total}</div></div>
+          <div class="stat-card"><div class="stat-label">Success</div><div class="stat-value" style="color:#137333">${s.success}</div></div>
+          <div class="stat-card"><div class="stat-label">Failed</div><div class="stat-value" style="color:#c62828">${s.failed}</div></div>
+        </div>
+        ${s.errors?.length ? `<div style="margin-top:12px"><strong>Errors:</strong><br>${s.errors.map(e=>`Row ${e.row}: ${e.reason}`).join('<br>')}</div>`:''}
+      </div>`;
+    } else { res.innerHTML = `<div class="alert alert-error">${d.message||'Upload failed'}</div>`; }
+  } catch(e) { res.innerHTML = `<div class="alert alert-error">Upload failed. Please try again.</div>`; }
+}
+
+function renderAddInventory() {
+  show(`
+    <div class="page-title">➕ Add Single Device</div>
+    <div class="form-card">
+      <h3>Device Details</h3>
+      <div id="addInvMsg" class="alert"></div>
+      <div class="form-row">
+        <div class="form-group"><label>Brand *</label>
+          <select id="aiBrand">
+            <option value="">Select brand *</option>
+            <option>itel</option><option>Tecno</option><option>Infinix</option><option>Oraimo</option><option>Villaon</option><option>Other</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Device Model *</label><input id="aiModel" placeholder="e.g. Spark 30"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Sample / HW Type *</label>
+          <select id="aiHwType">
+            <option value="">Select type *</option>
+            <option>PR0</option><option>PR0-1</option><option>PR1</option><option>PR1-1</option><option>PR2</option><option>PIR</option><option>MPR</option>
+          </select>
+        </div>
+        <div class="form-group"><label>HW Stage</label>
+          <select id="aiStage">
+            <option value="">Select stage</option>
+            <option>EVT</option><option>DVT</option><option>PVT</option><option>MP</option><option>Other</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>IMEI1 * (15 digits)</label><input id="aiImei1" placeholder="352000001234567" maxlength="15"></div>
+        <div class="form-group"><label>IMEI2 (15 digits)</label><input id="aiImei2" placeholder="352000001234568" maxlength="15"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>VC ID</label><input id="aiVcId" placeholder="VC ID"></div>
+        <div class="form-group"><label>Color *</label><input id="aiColor" placeholder="e.g. Black"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Storage / RAM *</label><input id="aiStorage" placeholder="e.g. 8GB/128GB"></div>
+        <div class="form-group"><label>Sample Received Date</label><input id="aiDate" type="date"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Warehouse / Location *</label><input id="aiLoc" placeholder="e.g. WH-A"></div>
+        <div class="form-group"><label>Inventory Holder *</label><input id="aiHolder" placeholder="Responsible person"></div>
+      </div>
+      <div class="form-group"><label>Remarks</label><textarea id="aiRemarks" placeholder="Any notes..."></textarea></div>
+      <button class="btn" onclick="saveNewInventory()">Save Device</button>
+    </div>`);
+}
+
+async function saveNewInventory() {
+  const msg   = document.getElementById('addInvMsg');
+  const brand = document.getElementById('aiBrand').value;
+  const model = document.getElementById('aiModel').value.trim();
+  const hwType= document.getElementById('aiHwType').value;
+  const imei1 = document.getElementById('aiImei1').value.trim();
+  const color = document.getElementById('aiColor').value.trim();
+  const storage=document.getElementById('aiStorage').value.trim();
+  const loc   = document.getElementById('aiLoc').value.trim();
+  const holder= document.getElementById('aiHolder').value.trim();
+
+  if (!brand||!model||!hwType||!color||!storage||!loc||!holder) {
+    showErr(msg,'Please fill all mandatory fields (*)'); return;
+  }
+  if (imei1 && imei1.length !== 15) { showErr(msg,'IMEI1 must be exactly 15 digits'); return; }
+  const imei2 = document.getElementById('aiImei2').value.trim();
+  if (imei2 && imei2.length !== 15) { showErr(msg,'IMEI2 must be exactly 15 digits'); return; }
+
+  const dateVal = document.getElementById('aiDate').value;
+  const d = await req('POST', '/api/inventory', {
+    brand, deviceModel: model, sampleHwType: hwType,
+    hwStage: document.getElementById('aiStage').value,
+    imei1, imei2,
+    vcId: document.getElementById('aiVcId').value.trim(),
+    color, storageRamVariant: storage,
+    sampleReceivedDate: dateVal ? new Date(dateVal).getTime() : null,
+    warehouseLocation: loc, inventoryHolder: holder,
+    remarks: document.getElementById('aiRemarks').value,
+  });
+  if (d.success) {
+    showOk(msg,'✅ Device added! You can now upload a photo for it.');
+    // Reset form
+    ['aiBrand','aiHwType','aiStage'].forEach(id => document.getElementById(id).value = '');
+    ['aiModel','aiImei1','aiImei2','aiVcId','aiColor','aiStorage','aiDate','aiLoc','aiHolder','aiRemarks']
+      .forEach(id => document.getElementById(id).value = '');
+    setTimeout(() => navigate('inventory'), 2500);
+  } else showErr(msg, d.message || 'Failed to add device');
+}
+
+function renderBenchNew() {
+  show(`
+    <div class="page-title">➕ Add Benchmark Device</div>
+    <div class="form-card">
+      <h3>Competitor Device Details</h3>
+      <div id="benchMsg" class="alert"></div>
+      <div class="form-row">
+        <div class="form-group"><label>Competitor Brand *</label>
+          <select id="bBrand">
+            <option value="">Select brand...</option>
+            ${['Samsung','Apple','Xiaomi','Vivo','Oppo','Realme','OnePlus','Motorola','Nokia','Google','Huawei','Other'].map(b=>`<option>${b}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group"><label>Device Model *</label><input id="bModel" placeholder="e.g. Galaxy S25 Ultra"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Category</label>
+          <select id="bCat">
+            ${['Smartphone','Tablet','Wearable','TWS','Feature Phone','Other'].map(c=>`<option>${c}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group"><label>Source</label><input id="bSource" placeholder="e.g. Purchased, Borrowed"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Serial / IMEI</label><input id="bSerial" placeholder="Serial number or IMEI"></div>
+        <div class="form-group"><label>Color</label><input id="bColor" placeholder="e.g. Black"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Storage / RAM</label><input id="bStorage" placeholder="e.g. 12GB/256GB"></div>
+        <div class="form-group"><label>Received Date</label><input id="bDate" type="date"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Warehouse / Location</label><input id="bLoc" placeholder="e.g. WH-A"></div>
+        <div class="form-group"><label>Custodian</label><input id="bCust" placeholder="Person responsible"></div>
+      </div>
+      <div class="form-group"><label>Purpose / Test Type</label><input id="bPurpose" placeholder="e.g. Camera comparison, Performance test"></div>
+      <div class="form-group"><label>Remarks</label><textarea id="bRemarks" placeholder="Any additional notes..."></textarea></div>
+      <button class="btn" onclick="saveBenchDevice()">Save Device</button>
+    </div>`);
+}
+
+async function saveBenchDevice() {
+  const msg   = document.getElementById('benchMsg');
+  const brand = document.getElementById('bBrand').value;
+  const model = document.getElementById('bModel').value.trim();
+  if (!brand || !model) { showErr(msg,'Competitor Brand and Device Model are required'); return; }
+  const dateVal = document.getElementById('bDate').value;
+  const d = await req('POST', '/api/benchmark', {
+    competitorBrand: brand,
+    deviceModel:     model,
+    category:        document.getElementById('bCat').value,
+    source:          document.getElementById('bSource').value,
+    serialImei:      document.getElementById('bSerial').value,
+    color:           document.getElementById('bColor').value,
+    storageRam:      document.getElementById('bStorage').value,
+    receivedDate:    dateVal ? new Date(dateVal).getTime() : null,
+    location:        document.getElementById('bLoc').value,
+    custodian:       document.getElementById('bCust').value,
+    purpose:         document.getElementById('bPurpose').value,
+    remarks:         document.getElementById('bRemarks').value,
+  });
+  if (d.success) { showOk(msg,'✅ Device added to Benchmark Inventory!'); setTimeout(()=>navigate('benchmark'),2000); }
+  else showErr(msg, d.message || 'Failed to save');
+}
+
+// ── Image Upload Modal ───────────────────────────────────────────────────────
+function showImageUpload(recordId, tableType) {
+  // tableType: 'inventory' or 'benchmark'
+  const endpoint = tableType === 'benchmark'
+    ? `/api/benchmark/${recordId}/image`
+    : `/api/inventory/${recordId}/image`;
+
+  const modal = document.createElement('div');
+  modal.id = 'imgModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:999;display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:16px;padding:24px;width:100%;max-width:420px">
+      <h3 style="font-size:15px;font-weight:500;margin-bottom:4px">📷 Upload Device Photo</h3>
+      <p style="font-size:13px;color:#888;margin-bottom:16px">Photo will be saved directly in Feishu Bitable</p>
+      <div id="imgErr" class="alert" style="display:none"></div>
+
+      <div id="imgDropZone" style="border:2px dashed #ddd;border-radius:12px;padding:32px;text-align:center;cursor:pointer;transition:border-color .2s;margin-bottom:16px"
+        onclick="document.getElementById('imgFileInput').click()"
+        ondragover="event.preventDefault();this.style.borderColor='#1a73e8'"
+        ondragleave="this.style.borderColor='#ddd'"
+        ondrop="handleImgDrop(event,'${endpoint}')">
+        <div style="font-size:40px;margin-bottom:8px">📸</div>
+        <div style="font-weight:500;margin-bottom:4px">Click to select photo</div>
+        <div style="font-size:12px;color:#888">JPG, PNG, WEBP — max 10MB</div>
+        <div id="imgPreviewWrap" style="margin-top:12px;display:none">
+          <img id="imgPreview" style="max-width:100%;max-height:160px;border-radius:8px;border:1px solid #eee">
+          <div id="imgFileName" style="font-size:12px;color:#666;margin-top:6px"></div>
+        </div>
+      </div>
+
+      <input type="file" id="imgFileInput" accept="image/*" capture="environment" style="display:none"
+        onchange="previewImg(this,'${endpoint}')">
+
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-outline" onclick="document.getElementById('imgModal').remove()">Cancel</button>
+        <button class="btn" id="imgUploadBtn" onclick="doUploadImg('${endpoint}')" disabled>📤 Upload Photo</button>
+      </div>
+      <div id="imgProgress" style="display:none;margin-top:12px;text-align:center;font-size:13px;color:#1a73e8">
+        ⏳ Uploading to Feishu...
+      </div>
+      <div id="imgSuccess" style="display:none;margin-top:12px;text-align:center;font-size:13px;color:#137333">
+        ✅ Photo saved to Feishu Bitable!
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+}
+
+let _imgFile = null;
+
+function previewImg(input, endpoint) {
+  const file = input.files[0];
+  if (!file) return;
+  _imgFile = file;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('imgPreview').src = e.target.result;
+    document.getElementById('imgFileName').textContent = `${file.name} (${(file.size/1024).toFixed(0)} KB)`;
+    document.getElementById('imgPreviewWrap').style.display = 'block';
+    document.getElementById('imgUploadBtn').disabled = false;
+    document.getElementById('imgDropZone').style.borderColor = '#1a73e8';
+  };
+  reader.readAsDataURL(file);
+}
+
+function handleImgDrop(e, endpoint) {
+  e.preventDefault();
+  document.getElementById('imgDropZone').style.borderColor = '#ddd';
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  // Simulate input change
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  const input = document.getElementById('imgFileInput');
+  input.files = dt.files;
+  previewImg(input, endpoint);
+}
+
+async function doUploadImg(endpoint) {
+  if (!_imgFile) return;
+  const btn      = document.getElementById('imgUploadBtn');
+  const progress = document.getElementById('imgProgress');
+  const success  = document.getElementById('imgSuccess');
+  const err      = document.getElementById('imgErr');
+
+  btn.disabled = true;
+  progress.style.display = 'block';
+  err.style.display = 'none';
+
+  try {
+    const fd = new FormData();
+    fd.append('image', _imgFile);
+    const res = await fetch(API + endpoint, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${TOKEN}` },
+      body: fd,
+    });
+    const data = await res.json();
+    progress.style.display = 'none';
+    if (data.success) {
+      success.style.display = 'block';
+      _imgFile = null;
+      setTimeout(() => {
+        document.getElementById('imgModal')?.remove();
+      }, 2000);
+    } else {
+      showErr(err, data.message || 'Upload failed');
+      btn.disabled = false;
+    }
+  } catch(e) {
+    progress.style.display = 'none';
+    showErr(err, 'Upload failed. Please try again.');
+    btn.disabled = false;
+  }
+}
+
+// ── Router ────────────────────────────────────────────────────────────────────────────
 function renderPage(page) {
   const routes = {
     dashboard:   renderDashboard,
@@ -899,6 +1329,11 @@ function renderPage(page) {
     reports:     renderReports,
     audit:       renderAudit,
     duplog:      renderDupLog,
+    benchmark:    renderBenchmark,
+    benchstats:   renderBenchStats,
+    benchupload:  renderBenchUpload,
+    benchnew:     renderBenchNew,
+    addinventory: renderAddInventory,
   };
   (routes[page] || renderDashboard)();
 }

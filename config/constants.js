@@ -6,6 +6,7 @@ const ROLES = {
   TL:               'TL',
   INVENTORY_HOLDER: 'InventoryHolder',
   EMPLOYEE:         'Employee',
+  BENCHMARK:        'BenchmarkViewer',  // Can see Benchmark inventory only
 };
 
 const DEVICE_STATUS = {
@@ -51,6 +52,7 @@ const TABLES = {
   DUPLICATE_LOG: () => process.env.TABLE_DUPLICATE_LOG,
   AMENDMENTS:    () => process.env.TABLE_AMENDMENTS,
   NOTIFICATIONS: () => process.env.TABLE_NOTIFICATIONS,
+  BENCHMARK:     () => process.env.TABLE_BENCHMARK,
 };
 
 const APP_TOKEN = () => process.env.BITABLE_APP_TOKEN;

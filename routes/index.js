@@ -298,17 +298,6 @@ router.get('/duplicate-log', authenticate, adminOnly, async (req, res, next) => 
   } catch (err) { next(err); }
 });
 
-// PATCH /api/users/:employeeId/email  (Admin only)
-router.patch('/users/:employeeId/email', authenticate, adminOnly, async (req, res, next) => {
-  try {
-    const { email } = req.body;
-    const userRecord = await usrSvc.findUserRecord(req.params.employeeId);
-    if (!userRecord) return res.status(404).json({ success: false, message: 'User not found' });
-    const { updateOne } = require('../utils/bitable');
-    await updateOne(TABLES.USERS(), userRecord._recordId, { 'Email': email });
-    res.json({ success: true, message: 'Email updated', employeeId: req.params.employeeId, email });
-  } catch (err) { next(err); }
-});
 // GET /api/notifications  (own notifications)
 router.get('/notifications', authenticate, allStaff, async (req, res, next) => {
   try {
@@ -335,6 +324,101 @@ router.get('/reports/:type', authenticate, adminOrTL, async (req, res, next) => 
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(data);
+  } catch (err) { next(err); }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// IMAGE UPLOAD — attach photos to inventory & benchmark records
+// ════════════════════════════════════════════════════════════════════════════
+const imageSvc = require('../services/imageService');
+
+// POST /api/inventory/:id/image  — upload image to an inventory record
+router.post('/inventory/:id/image', authenticate, allStaff, upload.single('image'), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, message: 'No image uploaded. Field name: image' });
+
+    const { buffer, originalname, mimetype } = req.file;
+    // Validate it's an image
+    if (!mimetype.startsWith('image/')) {
+      return res.status(400).json({ success: false, message: 'File must be an image (jpg, png, webp, etc.)' });
+    }
+    // Max 10MB
+    if (buffer.length > 10 * 1024 * 1024) {
+      return res.status(400).json({ success: false, message: 'Image must be under 10MB' });
+    }
+
+    const result = await imageSvc.uploadImageToRecord({
+      tableId:    TABLES.INVENTORY(),
+      recordId:   req.params.id,
+      fileBuffer: buffer,
+      fileName:   originalname,
+      mimeType:   mimetype,
+      fieldName:  'Images',
+    });
+
+    // Audit log
+    const { log } = require('../services/auditService');
+    await log({ ...req.user, action: 'StatusChange', entityType: 'Inventory', entityId: req.params.id, newValue: { image: originalname } });
+
+    res.json({ success: true, fileToken: result.fileToken, message: 'Image uploaded successfully' });
+  } catch (err) { next(err); }
+});
+
+// POST /api/benchmark/:id/image — upload image to benchmark record
+router.post('/benchmark/:id/image', authenticate, authorize(ROLES.ADMIN, ROLES.INVENTORY_HOLDER, ROLES.BENCHMARK), upload.single('image'), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, message: 'No image uploaded' });
+    const { buffer, originalname, mimetype } = req.file;
+    if (!mimetype.startsWith('image/')) return res.status(400).json({ success: false, message: 'File must be an image' });
+
+    const result = await imageSvc.uploadImageToRecord({
+      tableId:    TABLES.BENCHMARK(),
+      recordId:   req.params.id,
+      fileBuffer: buffer,
+      fileName:   originalname,
+      mimeType:   mimetype,
+      fieldName:  'Images',
+    });
+    res.json({ success: true, fileToken: result.fileToken, message: 'Image uploaded successfully' });
+  } catch (err) { next(err); }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// BENCHMARK INVENTORY (Admin, BenchmarkViewer, InventoryHolder)
+// ════════════════════════════════════════════════════════════════════════════
+const benchSvc = require('../services/benchmarkService');
+const benchAccess = authorize(ROLES.ADMIN, ROLES.BENCHMARK, ROLES.INVENTORY_HOLDER);
+
+router.get('/benchmark', authenticate, benchAccess, async (req, res, next) => {
+  try {
+    const { brand, category, pageSize, pageToken } = req.query;
+    const result = await benchSvc.listDevices({ brand, category, pageSize: Number(pageSize)||50, pageToken });
+    res.json({ success: true, ...result });
+  } catch (err) { next(err); }
+});
+
+router.get('/benchmark/stats', authenticate, benchAccess, async (req, res, next) => {
+  try {
+    const stats = await benchSvc.getStats();
+    res.json({ success: true, data: stats });
+  } catch (err) { next(err); }
+});
+
+router.post('/benchmark', authenticate, authorize(ROLES.ADMIN, ROLES.INVENTORY_HOLDER), validate([
+  body('competitorBrand').notEmpty(),
+  body('deviceModel').notEmpty(),
+]), async (req, res, next) => {
+  try {
+    const device = await benchSvc.createDevice(req.body, req.user);
+    res.status(201).json({ success: true, data: device });
+  } catch (err) { next(err); }
+});
+
+router.post('/benchmark/bulk-upload', authenticate, authorize(ROLES.ADMIN, ROLES.INVENTORY_HOLDER), upload.single('file'), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded' });
+    const summary = await benchSvc.bulkUpload(req.file.buffer, req.user);
+    res.json({ success: true, summary });
   } catch (err) { next(err); }
 });
 
