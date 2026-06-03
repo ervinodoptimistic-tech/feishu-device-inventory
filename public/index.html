@@ -172,16 +172,21 @@ function fmtDate(ts) {
 
 function show(html) { document.getElementById('app').innerHTML = html; }
 
+function fv(f,key){const v=f[key];if(!v)return '';if(typeof v==='string')return v;if(typeof v==='number')return String(v);if(Array.isArray(v))return v.map(x=>x?.text||x).filter(Boolean).join(', ');if(v.text)return v.text;return String(v);}
+function fvs(f,key){const v=f[key];if(!v)return '';if(typeof v==='string')return v;if(Array.isArray(v))return v[0]?.text||v[0]||'';if(v.text)return v.text;return String(v);}
 function navigate(page, push = true) {
-  if (push) pageStack.push(page);
+  if (push) {
+    if (pageStack[pageStack.length-1] !== page) pageStack.push(page);
+  }
   const btn = document.getElementById('backBtn');
-  btn.classList.toggle('show', pageStack.length > 1);
+  btn.classList.toggle('show', page !== 'dashboard');
   renderPage(page);
 }
 
 function goBack() {
   pageStack.pop();
-  if (pageStack.length) { navigate(pageStack[pageStack.length - 1], false); }
+  const prev = pageStack[pageStack.length - 1] || 'dashboard';
+  navigate(prev, false);
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -324,16 +329,22 @@ async function renderInventory() {
           <th>Brand/Model</th><th>IMEI1</th><th>HW Stage</th>
           <th>Location</th><th>Status</th><th>Assigned To</th><th>Return Date</th>
         </tr></thead>
-        <tbody>${items.length ? items.map(i=>`
-          <tr data-status="${i.deviceStatus}">
-            <td><div style="font-weight:500">${i.brand||'—'}</div><div style="font-size:12px;color:#888">${i.deviceModel||''}</div></td>
-            <td style="font-family:monospace;font-size:12px">${i.imei1||'—'}</td>
-            <td>${i.hwStage||'—'}</td>
-            <td>${i.warehouseLocation||'—'}</td>
-            <td>${statusPill(i.deviceStatus)}</td>
-            <td>${i.assignedTo||'—'}</td>
-            <td>${fmtDate(i.expectedReturnDate)}</td>
-          </tr>`).join('') : '<tr><td colspan="7" class="empty">No devices found</td></tr>'}
+        <tbody>${items.length ? items.map(i=>{
+          const f=i.fields||{};
+          const brand=i.brand||fv(f,'Brand')||'—';
+          const model=i.deviceModel||fv(f,'Device Model')||'';
+          const imei1=i.imei1||fv(f,'IMEI1')||'—';
+          const stage=i.hwStage||fv(f,'HW Stage')||'—';
+          const loc=i.warehouseLocation||fv(f,'Warehouse / Location')||'—';
+          const stat=i.deviceStatus||fvs(f,'Device Status')||'—';
+          const asgn=i.assignedTo||fv(f,'Assigned To')||'—';
+          const ret=i.expectedReturnDate||f['Expected Return Date']||null;
+          return `<tr data-status="${stat}">
+            <td><div style="font-weight:500">${brand}</div><div style="font-size:12px;color:#888">${model}</div></td>
+            <td style="font-family:monospace;font-size:12px">${imei1}</td>
+            <td>${stage}</td><td>${loc}</td>
+            <td>${statusPill(stat)}</td><td>${asgn}</td>
+            <td>${fmtDate(ret)}</td></tr>`;}).join('') : '<tr><td colspan="7" class="empty">No devices found</td></tr>'}
         </tbody>
       </table>
       </div>
