@@ -3,220 +3,898 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Device Inventory System</title>
+<title>Device Inventory System — TRANSSION</title>
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f6fa; min-height: 100vh; }
-.header { background: #1a73e8; color: white; padding: 16px 20px; display: flex; align-items: center; gap: 12px; }
-.header h1 { font-size: 18px; font-weight: 500; }
-.header .subtitle { font-size: 13px; opacity: 0.8; }
-.container { max-width: 800px; margin: 0 auto; padding: 20px 16px; }
-.welcome { background: white; border-radius: 12px; padding: 20px; margin-bottom: 16px; border: 1px solid #e8eaed; }
-.welcome h2 { font-size: 16px; font-weight: 500; color: #1a1a2e; margin-bottom: 6px; }
-.welcome p { font-size: 13px; color: #666; }
-.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px; }
-.card { background: white; border-radius: 12px; padding: 18px; border: 1px solid #e8eaed; cursor: pointer; transition: box-shadow 0.2s; text-decoration: none; display: block; }
-.card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.1); }
-.card-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; margin-bottom: 12px; }
-.card-title { font-size: 14px; font-weight: 500; color: #1a1a2e; margin-bottom: 4px; }
-.card-desc { font-size: 12px; color: #888; line-height: 1.4; }
-.blue { background: #e8f0fe; }
-.green { background: #e6f4ea; }
-.orange { background: #fef3e2; }
-.purple { background: #f3e8fd; }
-.red { background: #fce8e6; }
-.teal { background: #e6f7f5; }
-.login-card { background: white; border-radius: 12px; padding: 24px; border: 1px solid #e8eaed; }
-.login-card h2 { font-size: 16px; font-weight: 500; margin-bottom: 16px; color: #1a1a2e; }
-.form-group { margin-bottom: 14px; }
-.form-group label { display: block; font-size: 13px; color: #444; margin-bottom: 6px; font-weight: 500; }
-.form-group input { width: 100%; height: 40px; border: 1px solid #ddd; border-radius: 8px; padding: 0 12px; font-size: 14px; outline: none; transition: border-color 0.2s; }
-.form-group input:focus { border-color: #1a73e8; }
-.btn { width: 100%; height: 42px; background: #1a73e8; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; transition: background 0.2s; }
-.btn:hover { background: #1557b0; }
-.btn:disabled { background: #aaa; cursor: not-allowed; }
-.error { background: #fce8e6; color: #c62828; padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 12px; display: none; }
-.loading { text-align: center; padding: 40px; color: #888; font-size: 14px; }
-.status-bar { background: white; border-radius: 12px; padding: 14px 18px; margin-bottom: 16px; border: 1px solid #e8eaed; display: flex; align-items: center; justify-content: space-between; }
-.status-info { font-size: 13px; color: #444; }
-.status-name { font-weight: 500; color: #1a1a2e; }
-.badge { background: #e6f4ea; color: #137333; font-size: 11px; padding: 3px 10px; border-radius: 20px; font-weight: 500; }
-.logout-btn { font-size: 12px; color: #1a73e8; background: none; border: none; cursor: pointer; }
-.section-title { font-size: 13px; font-weight: 500; color: #888; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f6fa;min-height:100vh;font-size:14px}
+.header{background:#1a73e8;color:#fff;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.header-left{display:flex;align-items:center;gap:10px}
+.header h1{font-size:17px;font-weight:500}
+.header .sub{font-size:12px;opacity:.8}
+.back-btn{background:rgba(255,255,255,.2);border:none;color:#fff;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px;display:none;align-items:center;gap:4px}
+.back-btn.show{display:flex}
+.container{max-width:900px;margin:0 auto;padding:16px}
+/* Cards */
+.grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:16px}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+.card{background:#fff;border-radius:12px;padding:18px;border:1px solid #e8eaed;cursor:pointer;transition:box-shadow .2s}
+.card:hover{box-shadow:0 2px 12px rgba(0,0,0,.1)}
+.card-icon{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:12px}
+.card-title{font-size:14px;font-weight:500;color:#1a1a2e;margin-bottom:4px}
+.card-desc{font-size:12px;color:#888;line-height:1.4}
+.c-blue{background:#e8f0fe}.c-green{background:#e6f4ea}.c-orange{background:#fef3e2}
+.c-purple{background:#f3e8fd}.c-red{background:#fce8e6}.c-teal{background:#e6f7f5}
+/* Status bar */
+.status-bar{background:#fff;border-radius:12px;padding:14px 18px;margin-bottom:16px;border:1px solid #e8eaed;display:flex;align-items:center;justify-content:space-between}
+.status-name{font-weight:500;color:#1a1a2e;font-size:15px}
+.status-info{font-size:12px;color:#666;margin-top:2px}
+.badge{font-size:11px;padding:3px 10px;border-radius:20px;font-weight:500}
+.badge-admin{background:#e8f0fe;color:#1a73e8}
+.badge-tl{background:#e6f4ea;color:#137333}
+.badge-inv{background:#fef3e2;color:#b45309}
+.badge-emp{background:#f3e8fd;color:#7c3aed}
+.logout-btn{font-size:12px;color:#1a73e8;background:none;border:none;cursor:pointer;margin-left:10px}
+/* Login */
+.login-wrap{max-width:400px;margin:40px auto}
+.welcome-box{background:#fff;border-radius:12px;padding:20px;margin-bottom:16px;border:1px solid #e8eaed;text-align:center}
+.welcome-box h2{font-size:18px;font-weight:500;color:#1a1a2e;margin-bottom:6px}
+.welcome-box p{font-size:13px;color:#666}
+.login-box{background:#fff;border-radius:12px;padding:24px;border:1px solid #e8eaed}
+.login-box h2{font-size:16px;font-weight:500;margin-bottom:16px;color:#1a1a2e}
+.form-group{margin-bottom:14px}
+.form-group label{display:block;font-size:13px;color:#444;margin-bottom:6px;font-weight:500}
+.form-group input,.form-group select,.form-group textarea{width:100%;border:1px solid #ddd;border-radius:8px;padding:0 12px;font-size:14px;outline:none;transition:border-color .2s;background:#fff;color:#1a1a2e}
+.form-group input,.form-group select{height:40px}
+.form-group textarea{padding:10px 12px;resize:vertical;min-height:80px}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:#1a73e8}
+.btn{height:42px;background:#1a73e8;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;transition:background .2s;padding:0 20px}
+.btn:hover{background:#1557b0}
+.btn:disabled{background:#aaa;cursor:not-allowed}
+.btn-full{width:100%}
+.btn-outline{background:#fff;color:#1a73e8;border:1px solid #1a73e8}
+.btn-outline:hover{background:#e8f0fe}
+.btn-danger{background:#d93025}
+.btn-danger:hover{background:#b52a21}
+.btn-sm{height:32px;font-size:12px;padding:0 12px}
+.btn-green{background:#137333}
+.btn-green:hover{background:#0d5c28}
+/* Error/Success */
+.alert{padding:10px 12px;border-radius:8px;font-size:13px;margin-bottom:12px;display:none}
+.alert-error{background:#fce8e6;color:#c62828;display:block}
+.alert-success{background:#e6f4ea;color:#137333;display:block}
+/* Table */
+.table-wrap{background:#fff;border-radius:12px;border:1px solid #e8eaed;overflow:hidden;margin-bottom:16px}
+.table-header{padding:14px 18px;border-bottom:1px solid #e8eaed;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.table-title{font-size:15px;font-weight:500;color:#1a1a2e}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:#f8f9fa;color:#666;font-weight:500;padding:10px 14px;text-align:left;border-bottom:1px solid #e8eaed;white-space:nowrap}
+td{padding:10px 14px;border-bottom:1px solid #f0f0f0;color:#1a1a2e;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#fafafa}
+.status-pill{display:inline-block;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:500}
+.pill-new{background:#e8f0fe;color:#1a73e8}
+.pill-available{background:#e6f4ea;color:#137333}
+.pill-assigned{background:#fef3e2;color:#b45309}
+.pill-returned{background:#e8f0fe;color:#1557b0}
+.pill-damaged{background:#fce8e6;color:#c62828}
+.pill-scrapped{background:#f1f3f4;color:#666}
+.pill-pending{background:#fef3e2;color:#b45309}
+.pill-approved{background:#e6f4ea;color:#137333}
+.pill-rejected{background:#fce8e6;color:#c62828}
+/* Search */
+.search-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.search-input{height:36px;border:1px solid #ddd;border-radius:8px;padding:0 12px;font-size:13px;outline:none;min-width:180px;flex:1}
+.search-input:focus{border-color:#1a73e8}
+.filter-select{height:36px;border:1px solid #ddd;border-radius:8px;padding:0 10px;font-size:13px;outline:none;background:#fff}
+/* Stats */
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+.stat-card{background:#fff;border-radius:10px;padding:14px 16px;border:1px solid #e8eaed}
+.stat-label{font-size:11px;color:#888;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
+.stat-value{font-size:24px;font-weight:500;color:#1a1a2e}
+.stat-sub{font-size:11px;color:#aaa;margin-top:2px}
+/* Upload */
+.upload-zone{border:2px dashed #ddd;border-radius:12px;padding:40px;text-align:center;cursor:pointer;transition:border-color .2s;background:#fafafa}
+.upload-zone:hover{border-color:#1a73e8}
+.upload-zone.drag{border-color:#1a73e8;background:#e8f0fe}
+.upload-icon{font-size:40px;margin-bottom:12px}
+.upload-text{font-size:15px;font-weight:500;color:#1a1a2e;margin-bottom:6px}
+.upload-sub{font-size:13px;color:#888}
+/* Page */
+.page{display:none}
+.page.active{display:block}
+.page-title{font-size:17px;font-weight:500;color:#1a1a2e;margin-bottom:16px}
+.section-title{font-size:12px;font-weight:500;color:#888;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px}
+/* Empty */
+.empty{text-align:center;padding:40px;color:#aaa;font-size:13px}
+/* Loading */
+.loading{text-align:center;padding:30px;color:#888;font-size:13px}
+/* Form card */
+.form-card{background:#fff;border-radius:12px;padding:24px;border:1px solid #e8eaed;margin-bottom:16px}
+.form-card h3{font-size:15px;font-weight:500;margin-bottom:16px;color:#1a1a2e}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+/* Report buttons */
+.report-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.report-card{background:#fff;border-radius:12px;padding:20px;border:1px solid #e8eaed;text-align:center}
+.report-card .icon{font-size:32px;margin-bottom:12px}
+.report-card h3{font-size:14px;font-weight:500;margin-bottom:6px;color:#1a1a2e}
+.report-card p{font-size:12px;color:#888;margin-bottom:14px}
+.report-btns{display:flex;gap:8px;justify-content:center}
+/* Notification dot */
+.dot{width:8px;height:8px;background:#ea4335;border-radius:50%;display:inline-block;margin-left:4px;vertical-align:middle}
 </style>
 </head>
 <body>
 
 <div class="header">
-  <div>
-    <div style="font-size:22px">📦</div>
+  <div class="header-left">
+    <button class="back-btn" id="backBtn" onclick="goBack()">← Back</button>
+    <div>
+      <h1>📦 Device Inventory System</h1>
+      <div class="sub">TRANSSION Holdings</div>
+    </div>
   </div>
-  <div>
-    <h1>Device Inventory System</h1>
-    <div class="subtitle">TRANSSION Holdings</div>
-  </div>
+  <div id="headerRight"></div>
 </div>
 
-<div class="container">
-
-  <!-- Login View -->
-  <div id="loginView">
-    <div class="welcome" style="margin-top:8px">
-      <h2>Welcome to Device Inventory</h2>
-      <p>Sign in with your Employee ID to access the system.</p>
-    </div>
-    <div class="login-card">
-      <h2>Sign In</h2>
-      <div class="error" id="loginError"></div>
-      <div class="form-group">
-        <label>Employee ID</label>
-        <input type="text" id="empId" placeholder="e.g. ADMIN001" />
-      </div>
-      <div class="form-group">
-        <label>Password</label>
-        <input type="password" id="password" placeholder="Enter your password" />
-      </div>
-      <button class="btn" onclick="login()" id="loginBtn">Sign In</button>
-    </div>
-  </div>
-
-  <!-- Dashboard View -->
-  <div id="dashboardView" style="display:none">
-    <div class="status-bar">
-      <div>
-        <div class="status-name" id="userName">Loading...</div>
-        <div class="status-info" id="userRole"></div>
-      </div>
-      <div style="display:flex;align-items:center;gap:10px">
-        <span class="badge" id="roleBadge">Employee</span>
-        <button class="logout-btn" onclick="logout()">Sign out</button>
-      </div>
-    </div>
-
-    <div class="section-title">Quick Actions</div>
-    <div class="grid" id="menuGrid"></div>
-  </div>
-
-</div>
+<div class="container" id="app"></div>
 
 <script>
 const API = 'https://feishu-device-inventory-production.up.railway.app';
-let token = localStorage.getItem('inv_token');
-let user = JSON.parse(localStorage.getItem('inv_user') || 'null');
+let TOKEN = localStorage.getItem('inv_token');
+let USER  = JSON.parse(localStorage.getItem('inv_user') || 'null');
+let pageStack = [];
 
-const MENUS = {
-  Admin: [
-    { icon: '📋', color: 'blue',   title: 'All Inventory',     desc: 'View and manage all devices', action: 'inventory' },
-    { icon: '⬆️', color: 'green',  title: 'Bulk Upload',       desc: 'Upload devices via Excel',    action: 'upload' },
-    { icon: '📊', color: 'purple', title: 'Dashboard Stats',   desc: 'Overview and analytics',      action: 'dashboard' },
-    { icon: '📝', color: 'orange', title: 'All Requests',      desc: 'View device requests',        action: 'requests' },
-    { icon: '📁', color: 'teal',   title: 'Reports',           desc: 'Export Excel/CSV reports',    action: 'reports' },
-    { icon: '🔍', color: 'red',    title: 'Audit Log',         desc: 'Full activity history',       action: 'audit' },
-  ],
-  TL: [
-    { icon: '✅', color: 'green',  title: 'Approve Requests',  desc: 'Review pending requests',     action: 'approve' },
-    { icon: '📋', color: 'blue',   title: 'Team Inventory',    desc: 'View team devices',           action: 'inventory' },
-    { icon: '↩️', color: 'orange', title: 'Returns',           desc: 'Track device returns',        action: 'returns' },
-    { icon: '📊', color: 'purple', title: 'Reports',           desc: 'Export team reports',         action: 'reports' },
-  ],
-  InventoryHolder: [
-    { icon: '📋', color: 'blue',   title: 'All Inventory',     desc: 'View and manage devices',     action: 'inventory' },
-    { icon: '⬆️', color: 'green',  title: 'Bulk Upload',       desc: 'Upload devices via Excel',    action: 'upload' },
-    { icon: '✅', color: 'teal',   title: 'Validate Returns',  desc: 'Confirm returned devices',    action: 'returns' },
-    { icon: '📊', color: 'purple', title: 'Stock Overview',    desc: 'Check availability',          action: 'dashboard' },
-  ],
-  Employee: [
-    { icon: '📱', color: 'blue',   title: 'My Devices',        desc: 'Devices assigned to you',     action: 'mydevices' },
-    { icon: '➕', color: 'green',  title: 'Request Device',    desc: 'Submit a device request',     action: 'request' },
-    { icon: '↩️', color: 'orange', title: 'Return Device',     desc: 'Submit a return request',     action: 'return' },
-    { icon: '🔔', color: 'purple', title: 'My Requests',       desc: 'Track request status',        action: 'myrequests' },
-  ],
-};
-
-function init() {
-  if (token && user) {
-    showDashboard();
-  }
+// ── helpers ──────────────────────────────────────────────────────────────────
+async function req(method, path, body, isForm) {
+  const opts = { method, headers: { Authorization: `Bearer ${TOKEN}` } };
+  if (body && !isForm) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+  if (isForm) opts.body = body;
+  const r = await fetch(API + path, opts);
+  return r.json();
 }
 
-async function login() {
+function statusPill(s) {
+  const map = { New:'pill-new', Available:'pill-available', Assigned:'pill-assigned',
+    Returned:'pill-returned', Damaged:'pill-damaged', Scrapped:'pill-scrapped',
+    Pending:'pill-pending', Approved:'pill-approved', Rejected:'pill-rejected',
+    'Low stock':'pill-damaged', 'Out of stock':'pill-scrapped', 'In stock':'pill-available' };
+  return `<span class="status-pill ${map[s]||'pill-new'}">${s||'—'}</span>`;
+}
+
+function badgeClass(role) {
+  return { Admin:'badge-admin', TL:'badge-tl', InventoryHolder:'badge-inv', Employee:'badge-emp' }[role] || 'badge-emp';
+}
+
+function fmtDate(ts) {
+  if (!ts) return '—';
+  return new Date(typeof ts === 'number' ? ts : ts).toLocaleDateString('en-IN');
+}
+
+function show(html) { document.getElementById('app').innerHTML = html; }
+
+function navigate(page, push = true) {
+  if (push) pageStack.push(page);
+  const btn = document.getElementById('backBtn');
+  btn.classList.toggle('show', pageStack.length > 1);
+  renderPage(page);
+}
+
+function goBack() {
+  pageStack.pop();
+  if (pageStack.length) { navigate(pageStack[pageStack.length - 1], false); }
+}
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+function renderLogin() {
+  pageStack = [];
+  document.getElementById('backBtn').classList.remove('show');
+  document.getElementById('headerRight').innerHTML = '';
+  show(`
+    <div class="login-wrap">
+      <div class="welcome-box">
+        <div style="font-size:48px;margin-bottom:12px">📦</div>
+        <h2>Welcome to Device Inventory</h2>
+        <p>TRANSSION Holdings — Sign in with your Employee ID</p>
+      </div>
+      <div class="login-box">
+        <h2>Sign In</h2>
+        <div class="alert" id="err"></div>
+        <div class="form-group"><label>Employee ID</label>
+          <input id="empId" placeholder="e.g. ADMIN001" /></div>
+        <div class="form-group"><label>Password</label>
+          <input id="pw" type="password" placeholder="Enter your password" /></div>
+        <button class="btn btn-full" id="loginBtn" onclick="doLogin()">Sign In</button>
+      </div>
+    </div>`);
+  document.getElementById('empId').addEventListener('keydown', e => e.key==='Enter' && doLogin());
+  document.getElementById('pw').addEventListener('keydown', e => e.key==='Enter' && doLogin());
+}
+
+async function doLogin() {
   const empId = document.getElementById('empId').value.trim();
-  const pass  = document.getElementById('password').value;
-  const err   = document.getElementById('loginError');
+  const pw    = document.getElementById('pw').value;
+  const err   = document.getElementById('err');
   const btn   = document.getElementById('loginBtn');
-  err.style.display = 'none';
-  if (!empId || !pass) { err.textContent = 'Please enter Employee ID and password'; err.style.display = 'block'; return; }
+  err.className = 'alert'; err.style.display = 'none';
+  if (!empId||!pw) { showErr(err,'Please enter Employee ID and password'); return; }
   btn.disabled = true; btn.textContent = 'Signing in...';
   try {
-    const res = await fetch(`${API}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ employeeId: empId, password: pass })
-    });
-    const data = await res.json();
-    if (data.success) {
-      token = data.token;
-      user  = data.user;
-      localStorage.setItem('inv_token', token);
-      localStorage.setItem('inv_user', JSON.stringify(user));
-      showDashboard();
-    } else {
-      err.textContent = data.message || 'Login failed. Check your credentials.';
-      err.style.display = 'block';
-    }
-  } catch(e) {
-    err.textContent = 'Cannot connect to server. Please try again.';
-    err.style.display = 'block';
-  }
+    const d = await req('POST','/api/auth/login',{employeeId:empId, password:pw});
+    if (d.success) {
+      TOKEN = d.token; USER = d.user;
+      localStorage.setItem('inv_token', TOKEN);
+      localStorage.setItem('inv_user', JSON.stringify(USER));
+      renderDashboard();
+    } else { showErr(err, d.message || 'Invalid credentials'); }
+  } catch(e) { showErr(err,'Cannot connect to server. Please try again.'); }
   btn.disabled = false; btn.textContent = 'Sign In';
 }
 
-function showDashboard() {
-  document.getElementById('loginView').style.display = 'none';
-  document.getElementById('dashboardView').style.display = 'block';
-  document.getElementById('userName').textContent = user.fullName;
-  document.getElementById('userRole').textContent = `${user.department || ''} · ${user.employeeId}`;
-  document.getElementById('roleBadge').textContent = user.role;
-  const menus = MENUS[user.role] || MENUS.Employee;
-  document.getElementById('menuGrid').innerHTML = menus.map(m => `
-    <div class="card" onclick="handleAction('${m.action}')">
-      <div class="card-icon ${m.color}">${m.icon}</div>
-      <div class="card-title">${m.title}</div>
-      <div class="card-desc">${m.desc}</div>
-    </div>
-  `).join('');
-}
-
-function handleAction(action) {
-  const msgs = {
-    inventory: 'Opening inventory list...',
-    upload: 'Opening bulk upload...',
-    dashboard: 'Loading dashboard stats...',
-    requests: 'Loading requests...',
-    reports: 'Opening reports...',
-    audit: 'Loading audit log...',
-    approve: 'Loading pending approvals...',
-    returns: 'Loading returns...',
-    mydevices: 'Loading your assigned devices...',
-    request: 'Opening device request form...',
-    return: 'Opening return form...',
-    myrequests: 'Loading your requests...',
-  };
-  alert(msgs[action] || 'Coming soon!');
-}
+function showErr(el, msg) { el.textContent = msg; el.className = 'alert alert-error'; }
+function showOk(el, msg)  { el.textContent = msg; el.className = 'alert alert-success'; }
 
 function logout() {
-  localStorage.removeItem('inv_token');
-  localStorage.removeItem('inv_user');
-  token = null; user = null;
-  document.getElementById('dashboardView').style.display = 'none';
-  document.getElementById('loginView').style.display = 'block';
-  document.getElementById('empId').value = '';
-  document.getElementById('password').value = '';
+  localStorage.clear(); TOKEN = null; USER = null;
+  renderLogin();
 }
 
-document.addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
-init();
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+function renderDashboard() {
+  pageStack = ['dashboard'];
+  document.getElementById('backBtn').classList.remove('show');
+  document.getElementById('headerRight').innerHTML =
+    `<div style="text-align:right;font-size:12px;color:rgba(255,255,255,.9)">
+      ${USER.fullName}<br><button onclick="logout()" style="background:none;border:none;color:rgba(255,255,255,.7);cursor:pointer;font-size:11px">Sign out</button>
+    </div>`;
+
+  const MENUS = {
+    Admin: [
+      {i:'📋',c:'c-blue',  t:'All Inventory',   d:'View & manage devices',       p:'inventory'},
+      {i:'⬆️',c:'c-green', t:'Bulk Upload',      d:'Upload devices via Excel',    p:'upload'},
+      {i:'📊',c:'c-purple',t:'Dashboard Stats',  d:'Overview & analytics',        p:'stats'},
+      {i:'📝',c:'c-orange',t:'All Requests',     d:'View device requests',        p:'requests'},
+      {i:'👥',c:'c-teal',  t:'Manage Users',     d:'Register & manage employees', p:'users'},
+      {i:'📁',c:'c-blue',  t:'Reports',          d:'Export Excel/CSV reports',    p:'reports'},
+      {i:'🔍',c:'c-red',   t:'Audit Log',        d:'Full activity history',       p:'audit'},
+      {i:'⚠️',c:'c-orange',t:'Duplicate Log',    d:'Blocked duplicate entries',   p:'duplog'},
+    ],
+    TL: [
+      {i:'✅',c:'c-green', t:'Approve Requests', d:'Review pending requests',     p:'approve'},
+      {i:'📋',c:'c-blue',  t:'Team Inventory',   d:'View team devices',           p:'inventory'},
+      {i:'↩️',c:'c-orange',t:'Returns',          d:'Track device returns',        p:'returns'},
+      {i:'📊',c:'c-purple',t:'Dashboard Stats',  d:'Overview & analytics',        p:'stats'},
+      {i:'📁',c:'c-teal',  t:'Reports',          d:'Export team reports',         p:'reports'},
+    ],
+    InventoryHolder: [
+      {i:'📋',c:'c-blue',  t:'All Inventory',    d:'View & manage devices',       p:'inventory'},
+      {i:'⬆️',c:'c-green', t:'Bulk Upload',      d:'Upload devices via Excel',    p:'upload'},
+      {i:'✅',c:'c-teal',  t:'Validate Returns', d:'Confirm returned devices',    p:'returns'},
+      {i:'📊',c:'c-purple',t:'Stock Overview',   d:'Check availability',          p:'stats'},
+    ],
+    Employee: [
+      {i:'📱',c:'c-blue',  t:'My Devices',       d:'Devices assigned to you',     p:'mydevices'},
+      {i:'➕',c:'c-green', t:'Request Device',   d:'Submit a device request',     p:'newrequest'},
+      {i:'↩️',c:'c-orange',t:'Return Device',    d:'Submit a return request',     p:'newreturn'},
+      {i:'🔔',c:'c-purple',t:'My Requests',      d:'Track request status',        p:'myrequests'},
+    ],
+  };
+
+  const menus = MENUS[USER.role] || MENUS.Employee;
+  show(`
+    <div class="status-bar">
+      <div>
+        <div class="status-name">${USER.fullName}</div>
+        <div class="status-info">${USER.department||''} · ${USER.employeeId}</div>
+      </div>
+      <span class="badge ${badgeClass(USER.role)}">${USER.role}</span>
+    </div>
+    <div class="section-title">Quick Actions</div>
+    <div class="grid-2">${menus.map(m=>`
+      <div class="card" onclick="navigate('${m.p}')">
+        <div class="card-icon ${m.c}">${m.i}</div>
+        <div class="card-title">${m.t}</div>
+        <div class="card-desc">${m.d}</div>
+      </div>`).join('')}
+    </div>`);
+}
+
+// ── Inventory ─────────────────────────────────────────────────────────────────
+async function renderInventory() {
+  show(`<div class="loading">Loading inventory...</div>`);
+  const assignedTo = USER.role === 'Employee' ? USER.employeeId : '';
+  const d = await req('GET', `/api/inventory?pageSize=100${assignedTo?'&assignedTo='+assignedTo:''}`);
+  const items = d.items || [];
+  show(`
+    <div class="table-wrap">
+      <div class="table-header">
+        <div class="table-title">📋 Inventory (${items.length})</div>
+        <div class="search-row">
+          <input class="search-input" id="invSearch" placeholder="Search brand, model, IMEI..." oninput="filterTable('invTbl',this.value)">
+          <select class="filter-select" onchange="filterByStatus('invTbl',this.value)">
+            <option value="">All Status</option>
+            <option>New</option><option>Available</option><option>Assigned</option>
+            <option>Returned</option><option>Damaged</option><option>Scrapped</option>
+          </select>
+          ${USER.role!=='Employee'?`<button class="btn btn-sm btn-green" onclick="navigate('upload')">⬆ Upload</button>`:''}
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+      <table id="invTbl">
+        <thead><tr>
+          <th>Brand/Model</th><th>IMEI1</th><th>HW Stage</th>
+          <th>Location</th><th>Status</th><th>Assigned To</th><th>Return Date</th>
+        </tr></thead>
+        <tbody>${items.length ? items.map(i=>`
+          <tr data-status="${i.deviceStatus}">
+            <td><div style="font-weight:500">${i.brand||'—'}</div><div style="font-size:12px;color:#888">${i.deviceModel||''}</div></td>
+            <td style="font-family:monospace;font-size:12px">${i.imei1||'—'}</td>
+            <td>${i.hwStage||'—'}</td>
+            <td>${i.warehouseLocation||'—'}</td>
+            <td>${statusPill(i.deviceStatus)}</td>
+            <td>${i.assignedTo||'—'}</td>
+            <td>${fmtDate(i.expectedReturnDate)}</td>
+          </tr>`).join('') : '<tr><td colspan="7" class="empty">No devices found</td></tr>'}
+        </tbody>
+      </table>
+      </div>
+    </div>`);
+}
+
+function filterTable(tableId, q) {
+  const rows = document.querySelectorAll(`#${tableId} tbody tr`);
+  q = q.toLowerCase();
+  rows.forEach(r => r.style.display = r.textContent.toLowerCase().includes(q) ? '' : 'none');
+}
+
+function filterByStatus(tableId, s) {
+  const rows = document.querySelectorAll(`#${tableId} tbody tr`);
+  rows.forEach(r => r.style.display = (!s || r.dataset.status === s) ? '' : 'none');
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+async function renderStats() {
+  show(`<div class="loading">Loading dashboard...</div>`);
+  const d = await req('GET', '/api/inventory/dashboard');
+  const s = d.data || {};
+  const bs = s.byStatus || {};
+  show(`
+    <div class="page-title">📊 Dashboard Stats</div>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-label">Total Devices</div><div class="stat-value">${s.total||0}</div></div>
+      <div class="stat-card"><div class="stat-label">Assigned</div><div class="stat-value" style="color:#b45309">${bs.Assigned||0}</div></div>
+      <div class="stat-card"><div class="stat-label">Available</div><div class="stat-value" style="color:#137333">${bs.Available||0}</div></div>
+      <div class="stat-card"><div class="stat-label">Overdue</div><div class="stat-value" style="color:#c62828">${s.overdueCount||0}</div></div>
+    </div>
+    <div class="grid-2">
+      <div class="form-card">
+        <h3>By Status</h3>
+        ${Object.entries(bs).map(([k,v])=>`
+          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0f0">
+            <span>${statusPill(k)}</span><strong>${v}</strong>
+          </div>`).join('')}
+      </div>
+      <div class="form-card">
+        <h3>By Brand</h3>
+        ${Object.entries(s.byBrand||{}).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([k,v])=>`
+          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0f0">
+            <span>${k||'Unknown'}</span><strong>${v}</strong>
+          </div>`).join('')||'<div class="empty">No data</div>'}
+      </div>
+    </div>`);
+}
+
+// ── Bulk Upload ───────────────────────────────────────────────────────────────
+function renderUpload() {
+  show(`
+    <div class="page-title">⬆️ Bulk Upload</div>
+    <div class="form-card">
+      <h3>Upload Inventory via Excel/CSV</h3>
+      <p style="font-size:13px;color:#666;margin-bottom:16px">
+        Download the template, fill in your device data, then upload here. 
+        System will validate all fields and detect duplicates automatically.
+      </p>
+      <div style="margin-bottom:16px">
+        <a href="/inventory_bulk_upload_template.xlsx" download>
+          <button class="btn btn-outline" style="margin-right:8px">📥 Download Template</button>
+        </a>
+      </div>
+      <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()"
+        ondragover="event.preventDefault();this.classList.add('drag')"
+        ondragleave="this.classList.remove('drag')"
+        ondrop="handleDrop(event)">
+        <div class="upload-icon">📁</div>
+        <div class="upload-text">Click to select file or drag & drop</div>
+        <div class="upload-sub">Supports .xlsx and .csv files</div>
+      </div>
+      <input type="file" id="fileInput" accept=".xlsx,.csv" style="display:none" onchange="uploadFile(this.files[0])">
+    </div>
+    <div id="uploadResult"></div>`);
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('dropZone').classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if (f) uploadFile(f);
+}
+
+async function uploadFile(file) {
+  if (!file) return;
+  const res = document.getElementById('uploadResult');
+  res.innerHTML = `<div class="loading">⏳ Uploading and validating ${file.name}...</div>`;
+  const fd = new FormData(); fd.append('file', file);
+  try {
+    const d = await req('POST', '/api/inventory/bulk-upload', fd, true);
+    if (d.success) {
+      const s = d.summary;
+      res.innerHTML = `
+        <div class="form-card">
+          <h3>✅ Upload Complete — Batch: ${s.batchId}</h3>
+          <div class="stats-grid" style="grid-template-columns:repeat(5,1fr)">
+            <div class="stat-card"><div class="stat-label">Total</div><div class="stat-value">${s.total}</div></div>
+            <div class="stat-card"><div class="stat-label">Success</div><div class="stat-value" style="color:#137333">${s.success}</div></div>
+            <div class="stat-card"><div class="stat-label">Failed</div><div class="stat-value" style="color:#c62828">${s.failed}</div></div>
+            <div class="stat-card"><div class="stat-label">Duplicates</div><div class="stat-value" style="color:#b45309">${s.duplicates}</div></div>
+            <div class="stat-card"><div class="stat-label">Missing Data</div><div class="stat-value" style="color:#888">${s.missingData}</div></div>
+          </div>
+          ${s.errors?.length ? `<div style="margin-top:12px"><strong style="font-size:13px">Failed rows:</strong>
+            <div style="overflow-x:auto;margin-top:8px"><table><thead><tr><th>Row</th><th>Reason</th></tr></thead>
+            <tbody>${s.errors.map(e=>`<tr><td>${e.row}</td><td style="color:#c62828">${e.reason}</td></tr>`).join('')}</tbody></table></div>
+          </div>`:''}
+        </div>`;
+    } else {
+      res.innerHTML = `<div class="alert alert-error">${d.message||'Upload failed'}</div>`;
+    }
+  } catch(e) {
+    res.innerHTML = `<div class="alert alert-error">Upload failed. Please try again.</div>`;
+  }
+}
+
+// ── Requests (Admin/TL view) ──────────────────────────────────────────────────
+async function renderRequests() {
+  show(`<div class="loading">Loading requests...</div>`);
+  const d = await req('GET', '/api/requests?pageSize=100');
+  const items = d.items || [];
+  show(`
+    <div class="table-wrap">
+      <div class="table-header">
+        <div class="table-title">📝 Device Requests (${items.length})</div>
+        <select class="filter-select" onchange="filterByStatus('reqTbl',this.value)">
+          <option value="">All Status</option>
+          <option>Pending</option><option>Approved</option><option>Rejected</option>
+        </select>
+      </div>
+      <div style="overflow-x:auto">
+      <table id="reqTbl">
+        <thead><tr><th>Employee</th><th>Device Requested</th><th>Priority</th><th>Purpose</th><th>Status</th><th>Date</th>
+          ${USER.role==='TL'||USER.role==='Admin'?'<th>Action</th>':''}</tr></thead>
+        <tbody>${items.length ? items.map(i=>`
+          <tr data-status="${i.requestStatus}">
+            <td><div style="font-weight:500">${i.employeeName||'—'}</div><div style="font-size:12px;color:#888">${i.employeeId}</div></td>
+            <td>${i.preferredBrand||'Any'} ${i.preferredModel||''}</td>
+            <td>${i.priority||'—'}</td>
+            <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${i.purpose||'—'}</td>
+            <td>${statusPill(i.requestStatus)}</td>
+            <td>${fmtDate(i.requestedAt)}</td>
+            ${USER.role==='TL'||USER.role==='Admin' ? `<td>
+              ${i.requestStatus==='Pending'?`
+                <button class="btn btn-sm btn-green" onclick="showApproveModal('${i.recordId}','${i.employeeName}','${i.preferredBrand} ${i.preferredModel}')">Approve</button>
+                <button class="btn btn-sm btn-danger" style="margin-left:4px" onclick="rejectRequest('${i.recordId}')">Reject</button>
+              `:'—'}
+            </td>`:''}
+          </tr>`).join('') : '<tr><td colspan="7" class="empty">No requests found</td></tr>'}
+        </tbody>
+      </table>
+      </div>
+    </div>`);
+}
+
+// ── Approve Modal ─────────────────────────────────────────────────────────────
+async function showApproveModal(reqId, empName, device) {
+  const inv = await req('GET', '/api/inventory?status=Available&pageSize=50');
+  const available = (inv.items||[]).filter(i=>['New','Available','Returned'].includes(i.deviceStatus));
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999;display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:12px;padding:24px;width:100%;max-width:480px">
+      <h3 style="font-size:15px;font-weight:500;margin-bottom:4px">Approve Request</h3>
+      <p style="font-size:13px;color:#888;margin-bottom:16px">For ${empName} — ${device}</p>
+      <div id="approveErr" class="alert"></div>
+      <div class="form-group"><label>Select Device to Assign</label>
+        <select id="selDevice" style="width:100%;height:40px;border:1px solid #ddd;border-radius:8px;padding:0 10px;font-size:13px">
+          <option value="">— Choose an available device —</option>
+          ${available.map(d=>`<option value="${d.recordId}">${d.brand} ${d.deviceModel} — IMEI: ${d.imei1} (${d.deviceStatus})</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group"><label>Expected Return Date</label>
+        <input type="date" id="retDate" style="width:100%;height:40px;border:1px solid #ddd;border-radius:8px;padding:0 12px;font-size:13px">
+      </div>
+      <div class="form-group"><label>Remarks (optional)</label>
+        <input id="approveRemarks" placeholder="Any notes..." style="width:100%;height:40px;border:1px solid #ddd;border-radius:8px;padding:0 12px;font-size:13px">
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-outline" onclick="this.closest('div[style]').remove()">Cancel</button>
+        <button class="btn btn-green" onclick="doApprove('${reqId}',this.closest('div[style]'))">Approve & Assign</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+async function doApprove(reqId, modal) {
+  const devId = document.getElementById('selDevice').value;
+  const retDate = document.getElementById('retDate').value;
+  const remarks = document.getElementById('approveRemarks').value;
+  const err = document.getElementById('approveErr');
+  if (!devId) { showErr(err,'Please select a device'); return; }
+  if (!retDate) { showErr(err,'Please set a return date'); return; }
+  const d = await req('POST', `/api/requests/${reqId}/approve`, { inventoryRecordId: devId, expectedReturnDate: retDate, remarks });
+  if (d.success) { modal.remove(); navigate('requests', false); renderRequests(); }
+  else showErr(err, d.message || 'Approval failed');
+}
+
+async function rejectRequest(reqId) {
+  const reason = prompt('Rejection reason:');
+  if (!reason) return;
+  const d = await req('POST', `/api/requests/${reqId}/reject`, { reason });
+  if (d.success) renderRequests();
+  else alert(d.message || 'Failed to reject');
+}
+
+// ── My Requests (Employee) ────────────────────────────────────────────────────
+async function renderMyRequests() {
+  show(`<div class="loading">Loading your requests...</div>`);
+  const d = await req('GET', `/api/requests?employeeId=${USER.employeeId}&pageSize=50`);
+  const items = d.items || [];
+  show(`
+    <div class="table-wrap">
+      <div class="table-header">
+        <div class="table-title">🔔 My Requests</div>
+        <button class="btn btn-sm" onclick="navigate('newrequest')">+ New Request</button>
+      </div>
+      <table>
+        <thead><tr><th>Device</th><th>Purpose</th><th>Priority</th><th>Status</th><th>TL Remarks</th><th>Date</th></tr></thead>
+        <tbody>${items.length ? items.map(i=>`
+          <tr><td>${i.preferredBrand||'Any'} ${i.preferredModel||''}</td>
+            <td>${i.purpose||'—'}</td><td>${i.priority||'—'}</td>
+            <td>${statusPill(i.requestStatus)}</td>
+            <td style="font-size:12px;color:#888">${i.tlRemarks||'—'}</td>
+            <td>${fmtDate(i.requestedAt)}</td>
+          </tr>`).join('') : '<tr><td colspan="6" class="empty">No requests yet</td></tr>'}
+        </tbody>
+      </table>
+    </div>`);
+}
+
+// ── New Request Form ──────────────────────────────────────────────────────────
+function renderNewRequest() {
+  show(`
+    <div class="page-title">➕ Request a Device</div>
+    <div class="form-card">
+      <h3>Device Request Form</h3>
+      <div id="reqMsg" class="alert"></div>
+      <div class="form-row">
+        <div class="form-group"><label>Department / Project</label><input id="rDept" placeholder="e.g. QA Team"></div>
+        <div class="form-group"><label>Project Name</label><input id="rProj" placeholder="Project name"></div>
+      </div>
+      <div class="form-group"><label>Purpose of Request *</label>
+        <textarea id="rPurpose" placeholder="Why do you need this device?"></textarea></div>
+      <div class="form-row">
+        <div class="form-group"><label>Duration Required *</label><input id="rDur" placeholder="e.g. 2 weeks"></div>
+        <div class="form-group"><label>Priority</label>
+          <select id="rPriority"><option>Low</option><option selected>Medium</option><option>High</option><option>Critical</option></select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Preferred Brand</label><input id="rBrand" placeholder="e.g. Samsung"></div>
+        <div class="form-group"><label>Preferred Model</label><input id="rModel" placeholder="e.g. Galaxy S25"></div>
+      </div>
+      <div class="form-group"><label>Additional Remarks</label><input id="rRemarks" placeholder="Any other notes..."></div>
+      <button class="btn" onclick="submitRequest()">Submit Request</button>
+    </div>`);
+}
+
+async function submitRequest() {
+  const msg = document.getElementById('reqMsg');
+  const purpose = document.getElementById('rPurpose').value.trim();
+  const dur     = document.getElementById('rDur').value.trim();
+  if (!purpose||!dur) { showErr(msg,'Purpose and Duration are required'); return; }
+  const d = await req('POST', '/api/requests', {
+    department: document.getElementById('rDept').value,
+    projectName: document.getElementById('rProj').value,
+    purpose, durationRequired: dur,
+    priority: document.getElementById('rPriority').value,
+    preferredBrand: document.getElementById('rBrand').value,
+    preferredModel: document.getElementById('rModel').value,
+    remarks: document.getElementById('rRemarks').value,
+  });
+  if (d.success) { showOk(msg,'✅ Request submitted! Your TL will review it shortly.'); setTimeout(()=>navigate('myrequests'),2000); }
+  else showErr(msg, d.message || 'Submission failed');
+}
+
+// ── My Devices ────────────────────────────────────────────────────────────────
+async function renderMyDevices() {
+  show(`<div class="loading">Loading your devices...</div>`);
+  const d = await req('GET', `/api/inventory?assignedTo=${USER.employeeId}&pageSize=50`);
+  const items = d.items || [];
+  show(`
+    <div class="page-title">📱 My Assigned Devices</div>
+    ${items.length ? `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Brand/Model</th><th>IMEI</th><th>Color</th><th>Assigned Date</th><th>Return By</th><th>Status</th><th>Action</th></tr></thead>
+        <tbody>${items.map(i=>`
+          <tr>
+            <td><div style="font-weight:500">${i.brand}</div><div style="font-size:12px;color:#888">${i.deviceModel}</div></td>
+            <td style="font-family:monospace;font-size:12px">${i.imei1||'—'}</td>
+            <td>${i.color||'—'}</td>
+            <td>${fmtDate(i.assignedDate)}</td>
+            <td>${fmtDate(i.expectedReturnDate)}</td>
+            <td>${statusPill(i.deviceStatus)}</td>
+            <td><button class="btn btn-sm btn-outline" onclick="navigate('newreturn');sessionStorage.setItem('returnDeviceId','${i.recordId}');sessionStorage.setItem('returnDeviceName','${i.brand} ${i.deviceModel}')">Return</button></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>` : `<div class="form-card"><div class="empty">No devices currently assigned to you.<br><br>
+      <button class="btn" onclick="navigate('newrequest')">Request a Device</button></div></div>`}`);
+}
+
+// ── Return Form ───────────────────────────────────────────────────────────────
+function renderNewReturn() {
+  const devId   = sessionStorage.getItem('returnDeviceId') || '';
+  const devName = sessionStorage.getItem('returnDeviceName') || '';
+  show(`
+    <div class="page-title">↩️ Return a Device</div>
+    <div class="form-card">
+      <h3>Device Return Form</h3>
+      <div id="retMsg" class="alert"></div>
+      ${devName ? `<div style="background:#e8f0fe;border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px">
+        <strong>Returning:</strong> ${devName}</div>` : ''}
+      <div class="form-group"><label>Inventory Record ID *</label>
+        <input id="retDevId" value="${devId}" placeholder="Paste the inventory record ID" ${devId?'readonly':''}></div>
+      <div class="form-group"><label>Physical Condition *</label>
+        <select id="retCond">
+          <option>Good</option><option>Minor Damage</option><option>Major Damage</option><option>Non-Functional</option>
+        </select>
+      </div>
+      <div class="form-group" style="display:flex;align-items:center;gap:10px">
+        <input type="checkbox" id="retAcc" checked style="width:auto;height:auto">
+        <label for="retAcc" style="margin:0;font-size:13px">All accessories are present (charger, box, etc.)</label>
+      </div>
+      <div class="form-group"><label>Condition Remarks</label>
+        <textarea id="retRemarks" placeholder="Describe any damage or missing items..."></textarea>
+      </div>
+      <button class="btn" onclick="submitReturn()">Submit Return</button>
+    </div>`);
+}
+
+async function submitReturn() {
+  const msg   = document.getElementById('retMsg');
+  const devId = document.getElementById('retDevId').value.trim();
+  const cond  = document.getElementById('retCond').value;
+  if (!devId) { showErr(msg,'Please enter the Inventory Record ID'); return; }
+  const d = await req('POST', '/api/returns', {
+    inventoryRecordId: devId,
+    physicalCondition: cond,
+    accessoriesPresent: document.getElementById('retAcc').checked,
+    conditionRemarks: document.getElementById('retRemarks').value,
+  });
+  if (d.success) { showOk(msg,'✅ Return submitted! Inventory Holder will validate it.'); sessionStorage.removeItem('returnDeviceId'); }
+  else showErr(msg, d.message || 'Return failed');
+}
+
+// ── Returns (Inventory Holder) ────────────────────────────────────────────────
+async function renderReturns() {
+  show(`<div class="loading">Loading returns...</div>`);
+  const d = await req('GET', '/api/returns?pageSize=100');
+  const items = d.items || [];
+  show(`
+    <div class="table-wrap">
+      <div class="table-header"><div class="table-title">↩️ Returns (${items.length})</div></div>
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th>Device</th><th>Returned By</th><th>Return Date</th><th>Condition</th><th>Accessories</th><th>Validated By</th>
+          ${USER.role==='InventoryHolder'||USER.role==='Admin'?'<th>Action</th>':''}</tr></thead>
+        <tbody>${items.length ? items.map(i=>`
+          <tr>
+            <td><div style="font-weight:500">${i.brand} ${i.deviceModel}</div><div style="font-family:monospace;font-size:11px;color:#888">${i.imei1}</div></td>
+            <td>${i.returnedBy||'—'}<div style="font-size:11px;color:#888">${i.employeeId}</div></td>
+            <td>${fmtDate(i.returnDate)}</td>
+            <td>${statusPill(i.physicalCondition)}</td>
+            <td>${i.accessoriesPresent?'✅ Yes':'❌ No'}</td>
+            <td>${i.validatedBy||'Pending'}</td>
+            ${USER.role==='InventoryHolder'||USER.role==='Admin' ? `<td>
+              ${!i.validatedBy?`<button class="btn btn-sm btn-green" onclick="validateReturn('${i.recordId}','${i.physicalCondition}')">Validate</button>`:'—'}
+            </td>`:''}
+          </tr>`).join('') : '<tr><td colspan="7" class="empty">No returns found</td></tr>'}
+        </tbody>
+      </table></div>
+    </div>`);
+}
+
+async function validateReturn(retId, currentCond) {
+  const override = prompt(`Validate return. Override status? (leave blank to keep "${currentCond}")\nOptions: Available, Damaged, Scrapped`);
+  const remarks  = prompt('Validation remarks:') || '';
+  const d = await req('POST', `/api/returns/${retId}/validate`, { isValid: true, validatorRemarks: remarks, overrideStatus: override || undefined });
+  if (d.success) renderReturns();
+  else alert(d.message || 'Validation failed');
+}
+
+// ── Users ─────────────────────────────────────────────────────────────────────
+async function renderUsers() {
+  show(`<div class="loading">Loading users...</div>`);
+  const d = await req('GET', '/api/users');
+  const users = d.data || [];
+  show(`
+    <div class="table-wrap">
+      <div class="table-header">
+        <div class="table-title">👥 Users (${users.length})</div>
+        <button class="btn btn-sm" onclick="navigate('newuser')">+ Add User</button>
+      </div>
+      <table>
+        <thead><tr><th>Employee</th><th>Employee ID</th><th>Role</th><th>Department</th><th>TL ID</th><th>Status</th></tr></thead>
+        <tbody>${users.length ? users.map(u=>`
+          <tr>
+            <td style="font-weight:500">${u.fullName}</td>
+            <td style="font-family:monospace">${u.employeeId}</td>
+            <td><span class="badge ${badgeClass(u.role)}">${u.role}</span></td>
+            <td>${u.department||'—'}</td>
+            <td>${u.tlEmployeeId||'—'}</td>
+            <td>${u.isActive?'✅ Active':'❌ Inactive'}</td>
+          </tr>`).join('') : '<tr><td colspan="6" class="empty">No users found</td></tr>'}
+        </tbody>
+      </table>
+    </div>`);
+}
+
+// ── Register New User ─────────────────────────────────────────────────────────
+function renderNewUser() {
+  show(`
+    <div class="page-title">👤 Register New User</div>
+    <div class="form-card">
+      <h3>Employee Details</h3>
+      <div id="userMsg" class="alert"></div>
+      <div class="form-row">
+        <div class="form-group"><label>Full Name *</label><input id="uName" placeholder="Full name"></div>
+        <div class="form-group"><label>Employee ID *</label><input id="uEmpId" placeholder="e.g. EMP001"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Email *</label><input id="uEmail" type="email" placeholder="employee@transsion.com"></div>
+        <div class="form-group"><label>Password *</label><input id="uPw" type="password" placeholder="Min 8 characters"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Role *</label>
+          <select id="uRole"><option>Employee</option><option>TL</option><option>InventoryHolder</option><option>Admin</option></select>
+        </div>
+        <div class="form-group"><label>Department</label><input id="uDept" placeholder="e.g. QA, Engineering"></div>
+      </div>
+      <div class="form-group"><label>TL Employee ID (for Employees)</label>
+        <input id="uTL" placeholder="Their TL's Employee ID e.g. TL001"></div>
+      <button class="btn" onclick="registerUser()">Register Employee</button>
+    </div>`);
+}
+
+async function registerUser() {
+  const msg = document.getElementById('userMsg');
+  const name = document.getElementById('uName').value.trim();
+  const empId= document.getElementById('uEmpId').value.trim();
+  const email= document.getElementById('uEmail').value.trim();
+  const pw   = document.getElementById('uPw').value;
+  if (!name||!empId||!email||!pw) { showErr(msg,'All fields marked * are required'); return; }
+  const d = await req('POST', '/api/auth/register', {
+    fullName: name, employeeId: empId, email, password: pw,
+    role: document.getElementById('uRole').value,
+    department: document.getElementById('uDept').value,
+    tlEmployeeId: document.getElementById('uTL').value,
+  });
+  if (d.success) { showOk(msg,`✅ ${name} registered successfully!`); setTimeout(()=>navigate('users'),2000); }
+  else showErr(msg, d.message || 'Registration failed');
+}
+
+// ── Reports ───────────────────────────────────────────────────────────────────
+function renderReports() {
+  const reports = [
+    { i:'📋', t:'Inventory Overview',     d:'All devices with status',     type:'inventory' },
+    { i:'👥', t:'Employee Allocation',    d:'Who has what device',          type:'employee_allocation' },
+    { i:'⚠️', t:'Overdue Devices',        d:'Devices past return date',     type:'overdue' },
+    { i:'🔴', t:'Duplicate Logs',         d:'Blocked duplicate IMEIs',      type:'duplicate_logs' },
+    { i:'🔧', t:'Damaged Devices',        d:'Damaged & scrapped inventory', type:'damaged' },
+    { i:'🔍', t:'Audit Log',              d:'Full activity history',         type:'audit_log' },
+  ];
+  show(`
+    <div class="page-title">📁 Reports & Exports</div>
+    <div class="report-grid">${reports.map(r=>`
+      <div class="report-card">
+        <div class="icon">${r.i}</div>
+        <h3>${r.t}</h3>
+        <p>${r.d}</p>
+        <div class="report-btns">
+          <a href="${API}/api/reports/${r.type}?format=xlsx" target="_blank">
+            <button class="btn btn-sm btn-green">📥 Excel</button>
+          </a>
+          <a href="${API}/api/reports/${r.type}?format=csv" target="_blank">
+            <button class="btn btn-sm btn-outline" style="margin-left:4px">📄 CSV</button>
+          </a>
+        </div>
+      </div>`).join('')}
+    </div>`);
+}
+
+// ── Audit Log ─────────────────────────────────────────────────────────────────
+async function renderAudit() {
+  show(`<div class="loading">Loading audit log...</div>`);
+  const d = await req('GET', '/api/audit-log?pageSize=50');
+  const items = d.items || [];
+  show(`
+    <div class="table-wrap">
+      <div class="table-header">
+        <div class="table-title">🔍 Audit Log</div>
+        <input class="search-input" placeholder="Search..." oninput="filterTable('auditTbl',this.value)" style="max-width:200px">
+      </div>
+      <div style="overflow-x:auto"><table id="auditTbl">
+        <thead><tr><th>Time</th><th>User</th><th>Role</th><th>Action</th><th>Entity</th><th>Previous</th><th>Updated</th></tr></thead>
+        <tbody>${items.length ? items.map(i=>`
+          <tr>
+            <td style="font-size:11px;white-space:nowrap">${i.timestamp?new Date(i.timestamp).toLocaleString('en-IN'):'-'}</td>
+            <td>${i.userName||'—'}<div style="font-size:11px;color:#888">${i.userId}</div></td>
+            <td><span class="badge ${badgeClass(i.userRole)}">${i.userRole||'—'}</span></td>
+            <td>${statusPill(i.action)}</td>
+            <td>${i.entityType||'—'}<div style="font-size:11px;color:#888">${(i.entityId||'').slice(0,12)}</div></td>
+            <td style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis">${i.prevValue||'—'}</td>
+            <td style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis">${i.newValue||'—'}</td>
+          </tr>`).join('') : '<tr><td colspan="7" class="empty">No audit entries</td></tr>'}
+        </tbody>
+      </table></div>
+    </div>`);
+}
+
+// ── Duplicate Log ─────────────────────────────────────────────────────────────
+async function renderDupLog() {
+  show(`<div class="loading">Loading duplicate log...</div>`);
+  const d = await req('GET', '/api/duplicate-log?pageSize=50');
+  const items = d.items || [];
+  show(`
+    <div class="table-wrap">
+      <div class="table-header"><div class="table-title">⚠️ Duplicate Log (${items.length})</div></div>
+      <table>
+        <thead><tr><th>Batch ID</th><th>Field</th><th>Duplicate Value</th><th>Blocked By</th><th>Reason</th></tr></thead>
+        <tbody>${items.length ? items.map(i=>`
+          <tr>
+            <td style="font-size:11px;font-family:monospace">${i.fields?.['Upload Batch ID']||'—'}</td>
+            <td>${i.fields?.['Field Name']||'—'}</td>
+            <td style="font-family:monospace;color:#c62828">${i.fields?.['Duplicate Value']||'—'}</td>
+            <td>${i.fields?.['Blocked By']||'—'}</td>
+            <td>${i.fields?.['Reason']||'—'}</td>
+          </tr>`).join('') : '<tr><td colspan="5" class="empty">No duplicates found</td></tr>'}
+        </tbody>
+      </table>
+    </div>`);
+}
+
+// ── Router ────────────────────────────────────────────────────────────────────
+function renderPage(page) {
+  const routes = {
+    dashboard:   renderDashboard,
+    inventory:   renderInventory,
+    upload:      renderUpload,
+    stats:       renderStats,
+    requests:    renderRequests,
+    approve:     renderRequests,
+    myrequests:  renderMyRequests,
+    newrequest:  renderNewRequest,
+    mydevices:   renderMyDevices,
+    newreturn:   renderNewReturn,
+    returns:     renderReturns,
+    users:       renderUsers,
+    newuser:     renderNewUser,
+    reports:     renderReports,
+    audit:       renderAudit,
+    duplog:      renderDupLog,
+  };
+  (routes[page] || renderDashboard)();
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+if (TOKEN && USER) renderDashboard();
+else renderLogin();
 </script>
 </body>
 </html>
