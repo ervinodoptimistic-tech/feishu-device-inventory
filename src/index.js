@@ -27,6 +27,7 @@ app.get('/health', (req, res) => res.json({
 }));
 
 // ── API ────────────────────────────────────────────────────────────────────────
+app.use(express.static('public'));
 app.use('/api', routes);
 
 // 404

@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Device Inventory System</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f6fa; min-height: 100vh; }
+.header { background: #1a73e8; color: white; padding: 16px 20px; display: flex; align-items: center; gap: 12px; }
+.header h1 { font-size: 18px; font-weight: 500; }
+.header .subtitle { font-size: 13px; opacity: 0.8; }
+.container { max-width: 800px; margin: 0 auto; padding: 20px 16px; }
+.welcome { background: white; border-radius: 12px; padding: 20px; margin-bottom: 16px; border: 1px solid #e8eaed; }
+.welcome h2 { font-size: 16px; font-weight: 500; color: #1a1a2e; margin-bottom: 6px; }
+.welcome p { font-size: 13px; color: #666; }
+.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px; }
+.card { background: white; border-radius: 12px; padding: 18px; border: 1px solid #e8eaed; cursor: pointer; transition: box-shadow 0.2s; text-decoration: none; display: block; }
+.card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.1); }
+.card-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; margin-bottom: 12px; }
+.card-title { font-size: 14px; font-weight: 500; color: #1a1a2e; margin-bottom: 4px; }
+.card-desc { font-size: 12px; color: #888; line-height: 1.4; }
+.blue { background: #e8f0fe; }
+.green { background: #e6f4ea; }
+.orange { background: #fef3e2; }
+.purple { background: #f3e8fd; }
+.red { background: #fce8e6; }
+.teal { background: #e6f7f5; }
+.login-card { background: white; border-radius: 12px; padding: 24px; border: 1px solid #e8eaed; }
+.login-card h2 { font-size: 16px; font-weight: 500; margin-bottom: 16px; color: #1a1a2e; }
+.form-group { margin-bottom: 14px; }
+.form-group label { display: block; font-size: 13px; color: #444; margin-bottom: 6px; font-weight: 500; }
+.form-group input { width: 100%; height: 40px; border: 1px solid #ddd; border-radius: 8px; padding: 0 12px; font-size: 14px; outline: none; transition: border-color 0.2s; }
+.form-group input:focus { border-color: #1a73e8; }
+.btn { width: 100%; height: 42px; background: #1a73e8; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; transition: background 0.2s; }
+.btn:hover { background: #1557b0; }
+.btn:disabled { background: #aaa; cursor: not-allowed; }
+.error { background: #fce8e6; color: #c62828; padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 12px; display: none; }
+.loading { text-align: center; padding: 40px; color: #888; font-size: 14px; }
+.status-bar { background: white; border-radius: 12px; padding: 14px 18px; margin-bottom: 16px; border: 1px solid #e8eaed; display: flex; align-items: center; justify-content: space-between; }
+.status-info { font-size: 13px; color: #444; }
+.status-name { font-weight: 500; color: #1a1a2e; }
+.badge { background: #e6f4ea; color: #137333; font-size: 11px; padding: 3px 10px; border-radius: 20px; font-weight: 500; }
+.logout-btn { font-size: 12px; color: #1a73e8; background: none; border: none; cursor: pointer; }
+.section-title { font-size: 13px; font-weight: 500; color: #888; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div style="font-size:22px">📦</div>
+  </div>
+  <div>
+    <h1>Device Inventory System</h1>
+    <div class="subtitle">TRANSSION Holdings</div>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- Login View -->
+  <div id="loginView">
+    <div class="welcome" style="margin-top:8px">
+      <h2>Welcome to Device Inventory</h2>
+      <p>Sign in with your Employee ID to access the system.</p>
+    </div>
+    <div class="login-card">
+      <h2>Sign In</h2>
+      <div class="error" id="loginError"></div>
+      <div class="form-group">
+        <label>Employee ID</label>
+        <input type="text" id="empId" placeholder="e.g. ADMIN001" />
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="password" placeholder="Enter your password" />
+      </div>
+      <button class="btn" onclick="login()" id="loginBtn">Sign In</button>
+    </div>
+  </div>
+
+  <!-- Dashboard View -->
+  <div id="dashboardView" style="display:none">
+    <div class="status-bar">
+      <div>
+        <div class="status-name" id="userName">Loading...</div>
+        <div class="status-info" id="userRole"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span class="badge" id="roleBadge">Employee</span>
+        <button class="logout-btn" onclick="logout()">Sign out</button>
+      </div>
+    </div>
+
+    <div class="section-title">Quick Actions</div>
+    <div class="grid" id="menuGrid"></div>
+  </div>
+
+</div>
+
+<script>
+const API = 'https://feishu-device-inventory-production.up.railway.app';
+let token = localStorage.getItem('inv_token');
+let user = JSON.parse(localStorage.getItem('inv_user') || 'null');
+
+const MENUS = {
+  Admin: [
+    { icon: '📋', color: 'blue',   title: 'All Inventory',     desc: 'View and manage all devices', action: 'inventory' },
+    { icon: '⬆️', color: 'green',  title: 'Bulk Upload',       desc: 'Upload devices via Excel',    action: 'upload' },
+    { icon: '📊', color: 'purple', title: 'Dashboard Stats',   desc: 'Overview and analytics',      action: 'dashboard' },
+    { icon: '📝', color: 'orange', title: 'All Requests',      desc: 'View device requests',        action: 'requests' },
+    { icon: '📁', color: 'teal',   title: 'Reports',           desc: 'Export Excel/CSV reports',    action: 'reports' },
+    { icon: '🔍', color: 'red',    title: 'Audit Log',         desc: 'Full activity history',       action: 'audit' },
+  ],
+  TL: [
+    { icon: '✅', color: 'green',  title: 'Approve Requests',  desc: 'Review pending requests',     action: 'approve' },
+    { icon: '📋', color: 'blue',   title: 'Team Inventory',    desc: 'View team devices',           action: 'inventory' },
+    { icon: '↩️', color: 'orange', title: 'Returns',           desc: 'Track device returns',        action: 'returns' },
+    { icon: '📊', color: 'purple', title: 'Reports',           desc: 'Export team reports',         action: 'reports' },
+  ],
+  InventoryHolder: [
+    { icon: '📋', color: 'blue',   title: 'All Inventory',     desc: 'View and manage devices',     action: 'inventory' },
+    { icon: '⬆️', color: 'green',  title: 'Bulk Upload',       desc: 'Upload devices via Excel',    action: 'upload' },
+    { icon: '✅', color: 'teal',   title: 'Validate Returns',  desc: 'Confirm returned devices',    action: 'returns' },
+    { icon: '📊', color: 'purple', title: 'Stock Overview',    desc: 'Check availability',          action: 'dashboard' },
+  ],
+  Employee: [
+    { icon: '📱', color: 'blue',   title: 'My Devices',        desc: 'Devices assigned to you',     action: 'mydevices' },
+    { icon: '➕', color: 'green',  title: 'Request Device',    desc: 'Submit a device request',     action: 'request' },
+    { icon: '↩️', color: 'orange', title: 'Return Device',     desc: 'Submit a return request',     action: 'return' },
+    { icon: '🔔', color: 'purple', title: 'My Requests',       desc: 'Track request status',        action: 'myrequests' },
+  ],
+};
+
+function init() {
+  if (token && user) {
+    showDashboard();
+  }
+}
+
+async function login() {
+  const empId = document.getElementById('empId').value.trim();
+  const pass  = document.getElementById('password').value;
+  const err   = document.getElementById('loginError');
+  const btn   = document.getElementById('loginBtn');
+  err.style.display = 'none';
+  if (!empId || !pass) { err.textContent = 'Please enter Employee ID and password'; err.style.display = 'block'; return; }
+  btn.disabled = true; btn.textContent = 'Signing in...';
+  try {
+    const res = await fetch(`${API}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ employeeId: empId, password: pass })
+    });
+    const data = await res.json();
+    if (data.success) {
+      token = data.token;
+      user  = data.user;
+      localStorage.setItem('inv_token', token);
+      localStorage.setItem('inv_user', JSON.stringify(user));
+      showDashboard();
+    } else {
+      err.textContent = data.message || 'Login failed. Check your credentials.';
+      err.style.display = 'block';
+    }
+  } catch(e) {
+    err.textContent = 'Cannot connect to server. Please try again.';
+    err.style.display = 'block';
+  }
+  btn.disabled = false; btn.textContent = 'Sign In';
+}
+
+function showDashboard() {
+  document.getElementById('loginView').style.display = 'none';
+  document.getElementById('dashboardView').style.display = 'block';
+  document.getElementById('userName').textContent = user.fullName;
+  document.getElementById('userRole').textContent = `${user.department || ''} · ${user.employeeId}`;
+  document.getElementById('roleBadge').textContent = user.role;
+  const menus = MENUS[user.role] || MENUS.Employee;
+  document.getElementById('menuGrid').innerHTML = menus.map(m => `
+    <div class="card" onclick="handleAction('${m.action}')">
+      <div class="card-icon ${m.color}">${m.icon}</div>
+      <div class="card-title">${m.title}</div>
+      <div class="card-desc">${m.desc}</div>
+    </div>
+  `).join('');
+}
+
+function handleAction(action) {
+  const msgs = {
+    inventory: 'Opening inventory list...',
+    upload: 'Opening bulk upload...',
+    dashboard: 'Loading dashboard stats...',
+    requests: 'Loading requests...',
+    reports: 'Opening reports...',
+    audit: 'Loading audit log...',
+    approve: 'Loading pending approvals...',
+    returns: 'Loading returns...',
+    mydevices: 'Loading your assigned devices...',
+    request: 'Opening device request form...',
+    return: 'Opening return form...',
+    myrequests: 'Loading your requests...',
+  };
+  alert(msgs[action] || 'Coming soon!');
+}
+
+function logout() {
+  localStorage.removeItem('inv_token');
+  localStorage.removeItem('inv_user');
+  token = null; user = null;
+  document.getElementById('dashboardView').style.display = 'none';
+  document.getElementById('loginView').style.display = 'block';
+  document.getElementById('empId').value = '';
+  document.getElementById('password').value = '';
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+init();
+</script>
+</body>
+</html>
