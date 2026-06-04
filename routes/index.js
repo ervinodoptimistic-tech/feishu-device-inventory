@@ -268,8 +268,8 @@ router.post('/requests', authenticate, allStaff, validate([
   } catch (err) { next(err); }
 });
 
-// POST /api/requests/:id/approve  (TL/Admin)
-router.post('/requests/:id/approve', authenticate, adminOrTL, validate([
+// POST /api/requests/:id/approve  (TL/Admin/InventoryHolder)
+router.post('/requests/:id/approve', authenticate, authorize(ROLES.ADMIN, ROLES.TL, ROLES.INVENTORY_HOLDER), validate([
   body('inventoryRecordId').notEmpty().withMessage('inventoryRecordId is required'),
   body('expectedReturnDate').notEmpty(),
 ]), async (req, res, next) => {
@@ -279,16 +279,16 @@ router.post('/requests/:id/approve', authenticate, adminOrTL, validate([
   } catch (err) { next(err); }
 });
 
-// POST /api/requests/:id/reject  (TL/Admin)
-router.post('/requests/:id/reject', authenticate, adminOrTL, async (req, res, next) => {
+// POST /api/requests/:id/reject  (TL/Admin/InventoryHolder)
+router.post('/requests/:id/reject', authenticate, authorize(ROLES.ADMIN, ROLES.TL, ROLES.INVENTORY_HOLDER), async (req, res, next) => {
   try {
     await reqSvc.rejectRequest(req.params.id, req.body, req.user);
     res.json({ success: true });
   } catch (err) { next(err); }
 });
 
-// POST /api/requests/:id/clarify  (TL/Admin)
-router.post('/requests/:id/clarify', authenticate, adminOrTL, async (req, res, next) => {
+// POST /api/requests/:id/clarify  (TL/Admin/InventoryHolder)
+router.post('/requests/:id/clarify', authenticate, authorize(ROLES.ADMIN, ROLES.TL, ROLES.INVENTORY_HOLDER), async (req, res, next) => {
   try {
     await reqSvc.requestClarification(req.params.id, req.body, req.user);
     res.json({ success: true });

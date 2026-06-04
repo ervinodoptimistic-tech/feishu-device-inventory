@@ -315,11 +315,12 @@ function renderDashboard() {
       {i:'🏆',c:'c-purple',t:'Benchmark Inventory',d:'Competitor devices (restricted)',p:'benchmark'},
     ],
     TL: [
-      {i:'✅',c:'c-green', t:'Approve Requests', d:'Review pending requests',     p:'approve'},
-      {i:'📋',c:'c-blue',  t:'Team Inventory',   d:'View team devices',           p:'inventory'},
-      {i:'↩️',c:'c-orange',t:'Returns',          d:'Track device returns',        p:'returns'},
-      {i:'📊',c:'c-purple',t:'Dashboard Stats',  d:'Overview & analytics',        p:'stats'},
-      {i:'📁',c:'c-teal',  t:'Reports',          d:'Export team reports',         p:'reports'},
+      {i:'✅',c:'c-green', t:'Approve Requests', d:'Review & approve device requests', p:'approve'},
+      {i:'📋',c:'c-blue',  t:'All Inventory',    d:'View all devices & assignments',   p:'inventory'},
+      {i:'👤',c:'c-teal',  t:'My Assignment',    d:'Devices assigned to me',           p:'mydevices'},
+      {i:'↩️',c:'c-orange',t:'Returns',          d:'Track device returns',             p:'returns'},
+      {i:'📊',c:'c-purple',t:'Dashboard Stats',  d:'Overview & analytics',             p:'stats'},
+      {i:'📁',c:'c-blue',  t:'Reports',          d:'Export team reports',              p:'reports'},
     ],
     InventoryHolder: [
       {i:'📋',c:'c-blue',  t:'All Inventory',    d:'View & manage devices',       p:'inventory'},
@@ -334,10 +335,10 @@ function renderDashboard() {
       {i:'📊',c:'c-blue',  t:'Benchmark Stats',  d:'Overview by brand/category',  p:'benchstats'},
     ],
     Employee: [
-      {i:'📱',c:'c-blue',  t:'My Devices',       d:'Devices assigned to you',     p:'mydevices'},
-      {i:'➕',c:'c-green', t:'Request Device',   d:'Submit a device request',     p:'newrequest'},
-      {i:'↩️',c:'c-orange',t:'Return Device',    d:'Submit a return request',     p:'newreturn'},
-      {i:'🔔',c:'c-purple',t:'My Requests',      d:'Track request status',        p:'myrequests'},
+      {i:'📱',c:'c-blue',  t:'My Assigned Devices', d:'Devices currently assigned to you',  p:'mydevices'},
+      {i:'➕',c:'c-green', t:'Request a Device',    d:'Submit new device request to holder', p:'newrequest'},
+      {i:'↩️',c:'c-orange',t:'Return a Device',     d:'Submit return when done',             p:'newreturn'},
+      {i:'🔔',c:'c-purple',t:'My Requests',         d:'Track all your request statuses',     p:'myrequests'},
     ],
   };
 
@@ -675,16 +676,63 @@ async function doApprove(reqId, modal) {
   if (!devId) { showErr(err,'Please select a device'); return; }
   if (!retDate) { showErr(err,'Please set a return date'); return; }
   const d = await req('POST', `/api/requests/${reqId}/approve`, { inventoryRecordId: devId, expectedReturnDate: retDate, remarks });
-  if (d.success) { clearCache('/api/requests'); clearCache('/api/inventory'); modal.remove(); navigate('requests', false); renderRequests(); }
+  if (d.success) {
+    clearCache('/api/requests'); clearCache('/api/inventory');
+    modal.remove();
+    navigate('requests', false);
+    renderRequests();
+    const toast = document.createElement('div');
+    toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#137333;color:#fff;padding:12px 24px;border-radius:8px;font-size:13px;z-index:9999;font-weight:500';
+    toast.textContent = '✅ Approved! Employee notified on Feishu chat & email';
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 4000);
+  }
   else showErr(err, d.message || 'Approval failed');
 }
 
-async function rejectRequest(reqId) {
-  const reason = prompt('Rejection reason:');
-  if (!reason) return;
+function rejectRequest(reqId) {
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:999;display:flex;align-items:center;justify-content:center;padding:16px';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:420px">
+      <h3 style="font-size:15px;font-weight:600;margin-bottom:4px;color:#c62828">❌ Reject Request</h3>
+      <p style="font-size:12px;color:#888;margin-bottom:16px">The requester will be notified on Feishu chat and email.</p>
+      <div id="rejectErr" class="alert"></div>
+      <div class="form-group">
+        <label>Reason for rejection * <span style="color:#c62828;font-size:11px">(mandatory — will be sent to employee)</span></label>
+        <textarea id="rejectReason" placeholder="Please explain why the request is rejected..." 
+          style="width:100%;border:1px solid #ddd;border-radius:8px;padding:10px 12px;font-size:13px;min-height:80px;resize:vertical"></textarea>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+        <button class="btn btn-outline btn-sm" onclick="this.closest('div[style*=fixed]').remove()">Cancel</button>
+        <button class="btn btn-danger btn-sm" onclick="doRejectRequest('${reqId}',this.closest('div[style*=fixed]'))">❌ Reject & Notify</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
+}
+
+async function doRejectRequest(reqId, modal) {
+  const reason = document.getElementById('rejectReason').value.trim();
+  const err    = document.getElementById('rejectErr');
+  if (!reason) { showErr(err, 'Rejection reason is mandatory — the employee must know why.'); return; }
+  const btn = modal.querySelector('.btn-danger');
+  if (btn) { btn.disabled = true; btn.textContent = 'Rejecting...'; }
   const d = await req('POST', `/api/requests/${reqId}/reject`, { reason });
-  if (d.success) renderRequests();
-  else alert(d.message || 'Failed to reject');
+  if (d.success) {
+    modal.remove();
+    clearCache('/api/requests');
+    renderRequests();
+    // Show toast
+    const toast = document.createElement('div');
+    toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#c62828;color:#fff;padding:12px 24px;border-radius:8px;font-size:13px;z-index:9999';
+    toast.textContent = '❌ Request rejected — employee notified on Feishu & email';
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+  } else {
+    if (btn) { btn.disabled = false; btn.textContent = '❌ Reject & Notify'; }
+    showErr(err, d.message || 'Failed');
+  }
 }
 
 // ── My Requests (Employee) ────────────────────────────────────────────────────
@@ -716,17 +764,21 @@ async function renderMyRequests() {
 function renderNewRequest() {
   show(`
     <div class="page-title">➕ Request a Device</div>
+    <div style="background:#e8f0fe;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#1a73e8">
+      📧 You will receive an email confirmation once your request is submitted and when it is approved or rejected.
+    </div>
     <div class="form-card">
       <h3>Device Request Form</h3>
+      <p style="font-size:12px;color:#888;margin-bottom:14px">Fields marked * are mandatory</p>
       <div id="reqMsg" class="alert"></div>
       <div class="form-row">
-        <div class="form-group"><label>Department / Project</label><input id="rDept" placeholder="e.g. QA Team"></div>
+        <div class="form-group"><label>Department / Project</label><input id="rDept" placeholder="e.g. QA Team, R&D"></div>
         <div class="form-group"><label>Project Name</label><input id="rProj" placeholder="Project name"></div>
       </div>
       <div class="form-group"><label>Purpose of Request *</label>
-        <textarea id="rPurpose" placeholder="Why do you need this device?"></textarea></div>
+        <textarea id="rPurpose" placeholder="Why do you need this device? e.g. Camera testing for Spark 30 launch"></textarea></div>
       <div class="form-row">
-        <div class="form-group"><label>Duration Required *</label><input id="rDur" placeholder="e.g. 2 weeks"></div>
+        <div class="form-group"><label>Duration Required *</label><input id="rDur" placeholder="e.g. 2 weeks, 1 month"></div>
         <div class="form-group"><label>Priority</label>
           <select id="rPriority"><option>Low</option><option selected>Medium</option><option>High</option><option>Critical</option></select>
         </div>

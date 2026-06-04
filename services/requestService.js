@@ -1,10 +1,12 @@
-// services/requestService.js
-// Full device request & approval workflow.
+// services/requestService.js  v2
+// Device request & approval workflow.
+// Approval can be done by TL OR InventoryHolder.
 
 const { listPage, getOne, createOne, updateOne, fieldText, selectText } = require('../utils/bitable');
 const { TABLES, REQUEST_STATUS, DEVICE_STATUS, AUDIT_ACTIONS } = require('../config/constants');
 const audit  = require('./auditService');
 const notif  = require('./notificationService');
+const bot    = require('./feishuBotService');   // Feishu chat messages
 const invSvc = require('./inventoryService');
 const usrSvc = require('./userService');
 
@@ -33,10 +35,12 @@ function toRequest(record) {
   };
 }
 
-// ── Submit a new device request ───────────────────────────────────────────────
+// ── Submit request ────────────────────────────────────────────────────────────
 async function submitRequest(data, actorUser) {
-  // Look up TL
-  const tl = await usrSvc.getTL(actorUser.employeeId);
+  // Find inventory holders to notify
+  const allUsers = await usrSvc.listUsers();
+  const holders  = allUsers.filter(u => u.role === 'InventoryHolder' || u.role === 'Admin');
+  const holder   = holders[0]; // primary holder
 
   const record = await createOne(TABLES.REQUESTS(), {
     'Employee Name':    actorUser.fullName,
@@ -49,57 +53,77 @@ async function submitRequest(data, actorUser) {
     'Preferred Model':  data.preferredModel || '',
     'Priority':         { text: data.priority || 'Medium', type: 'text' },
     'Request Status':   { text: REQUEST_STATUS.PENDING, type: 'text' },
-    'TL Employee ID':   tl?.employeeId || '',
+    'TL Employee ID':   holder?.employeeId || '',
     'Remarks':          data.remarks || '',
   });
 
   const req = toRequest(record);
 
-  await audit.log({ ...actorUser, action: AUDIT_ACTIONS.REQUEST_CREATED, entityType: 'Request', entityId: record.record_id, newValue: data });
+  await audit.log({
+    ...actorUser, action: AUDIT_ACTIONS.REQUEST_CREATED,
+    entityType: 'Request', entityId: record.record_id, newValue: data,
+  });
 
-  // Notify employee + TL
+  // Email + Feishu chat: notify employee + all inventory holders
   const empUser = await usrSvc.getUserByEmployeeId(actorUser.employeeId);
   await notif.notifyRequestSubmitted({
     employeeName:  actorUser.fullName,
     employeeId:    actorUser.employeeId,
     employeeEmail: empUser?.email || '',
-    brand:         data.preferredBrand || 'N/A',
-    model:         data.preferredModel || 'N/A',
-    tlEmail:       tl?.email || '',
-    tlId:          tl?.employeeId || '',
+    brand:         data.preferredBrand || 'Any',
+    model:         data.preferredModel || '',
+    holderName:    holder?.fullName    || 'Inventory Team',
+    holderEmail:   holder?.email       || '',
+    holderId:      holder?.employeeId  || '',
   });
+
+  // Send Feishu chat notification to ALL inventory holders
+  for (const h of holders) {
+    if (h.email) {
+      bot.notifyHolderNewRequest({
+        holderEmail:     h.email,
+        requesterName:   actorUser.fullName,
+        requesterId:     actorUser.employeeId,
+        brand:           data.preferredBrand || 'Any',
+        model:           data.preferredModel || '',
+        purpose:         data.purpose        || '',
+        priority:        data.priority       || 'Medium',
+        requestRecordId: record.record_id,
+      }).catch(e => console.error('[Bot] notifyHolderNewRequest:', e.message));
+    }
+  }
 
   return req;
 }
 
-// ── TL approves a request and assigns a device ────────────────────────────────
+// ── Approve request ───────────────────────────────────────────────────────────
 async function approveRequest(requestRecordId, { inventoryRecordId, expectedReturnDate, remarks }, actorUser) {
   const reqRecord = await getOne(TABLES.REQUESTS(), requestRecordId);
   if (!reqRecord) throw new Error('Request not found');
-  const req = toRequest(reqRecord);
+  const reqData = toRequest(reqRecord);
 
-  if (req.requestStatus !== REQUEST_STATUS.PENDING && req.requestStatus !== REQUEST_STATUS.PENDING_CLARIFICATION) {
-    throw new Error(`Cannot approve request in status: ${req.requestStatus}`);
+  if (reqData.requestStatus !== REQUEST_STATUS.PENDING &&
+      reqData.requestStatus !== REQUEST_STATUS.PENDING_CLARIFICATION) {
+    throw new Error(`Cannot approve — request status is: ${reqData.requestStatus}`);
   }
 
-  // Verify device is available
+  // Verify device available
   const device = await invSvc.getDevice(inventoryRecordId);
   if (!device) throw new Error('Device not found');
   if (device.deviceStatus === DEVICE_STATUS.ASSIGNED) {
-    // Block + notify
     const adminList = await usrSvc.listUsers();
     const admin = adminList.find(u => u.role === 'Admin');
     await notif.notifyReassignmentBlocked({ adminEmail: admin?.email, adminId: admin?.employeeId, imei: device.imei1, assignedTo: device.assignedTo });
-    throw new Error(`Device is already assigned to ${device.assignedTo}. It must be returned first.`);
+    throw new Error(`Device is already assigned to ${device.assignedTo}. Must be returned first.`);
   }
   if (!['New','Available','Returned'].includes(device.deviceStatus)) {
-    throw new Error(`Device status is ${device.deviceStatus} — not available for assignment.`);
+    throw new Error(`Device status is "${device.deviceStatus}" — not available for assignment.`);
   }
 
-  const now       = Date.now();
-  const returnTs  = expectedReturnDate ? new Date(expectedReturnDate).getTime() : null;
+  const now      = Date.now();
+  const returnTs = expectedReturnDate ? new Date(expectedReturnDate).getTime() : null;
 
-  // 1. Update request
+  // Update request
   await updateOne(TABLES.REQUESTS(), requestRecordId, {
     'Request Status':        { text: REQUEST_STATUS.APPROVED, type: 'text' },
     'TL Decision':           'Approved',
@@ -109,55 +133,82 @@ async function approveRequest(requestRecordId, { inventoryRecordId, expectedRetu
     'Assigned Inventory ID': inventoryRecordId,
   });
 
-  // 2. Update device
+  // Update device
   await invSvc.updateDevice(inventoryRecordId, {
     deviceStatus:       DEVICE_STATUS.ASSIGNED,
-    assignedTo:         req.employeeName,
-    employeeId:         req.employeeId,
+    assignedTo:         reqData.employeeName,
+    employeeId:         reqData.employeeId,
     assignedDate:       now,
     expectedReturnDate: returnTs,
   }, actorUser);
 
-  // 3. Create assignment record
-  const { createOne: create } = require('../utils/bitable');
-  await create(TABLES.ASSIGNMENTS(), {
-    'Inventory Record ID':  inventoryRecordId,
-    'IMEI1':               device.imei1,
-    'Brand':               device.brand,
-    'Device Model':        device.deviceModel,
-    'Employee Name':       req.employeeName,
-    'Employee ID':         req.employeeId,
-    'Request ID':          requestRecordId,
-    'Assigned By':         actorUser.employeeId,
-    'Assigned Date':       now,
-    'Expected Return Date':returnTs,
-    'Status':              { text: 'Active', type: 'text' },
-    'Remarks':             remarks || '',
+  // Create assignment record
+  await createOne(TABLES.ASSIGNMENTS(), {
+    'Inventory Record ID':   inventoryRecordId,
+    'IMEI1':                 device.imei1,
+    'Brand':                 device.brand,
+    'Device Model':          device.deviceModel,
+    'Employee Name':         reqData.employeeName,
+    'Employee ID':           reqData.employeeId,
+    'Request ID':            requestRecordId,
+    'Assigned By':           actorUser.employeeId,
+    'Assigned Date':         now,
+    'Expected Return Date':  returnTs,
+    'Status':                { text: 'Active', type: 'text' },
+    'Remarks':               remarks || '',
   });
 
-  await audit.log({ ...actorUser, action: AUDIT_ACTIONS.REQUEST_APPROVED, entityType: 'Request', entityId: requestRecordId, prevValue: { status: req.requestStatus }, newValue: { status: REQUEST_STATUS.APPROVED, device: device.imei1 } });
+  await audit.log({
+    ...actorUser, action: AUDIT_ACTIONS.REQUEST_APPROVED,
+    entityType: 'Request', entityId: requestRecordId,
+    prevValue: { status: reqData.requestStatus },
+    newValue: { status: REQUEST_STATUS.APPROVED, imei: device.imei1 },
+  });
 
-  // 4. Notify employee
-  const empUser = await usrSvc.getUserByEmployeeId(req.employeeId);
+  // Email employee — device assigned notification
+  const empUser = await usrSvc.getUserByEmployeeId(reqData.employeeId);
+  const fmtDate = (ts) => ts ? new Date(ts).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : 'N/A';
+
   await notif.notifyRequestApproved({
-    employeeName:       req.employeeName,
-    employeeId:         req.employeeId,
+    employeeName:       reqData.employeeName,
+    employeeId:         reqData.employeeId,
     email:              empUser?.email || '',
     brand:              device.brand,
     model:              device.deviceModel,
     imei:               device.imei1,
-    assignedDate:       new Date(now).toLocaleDateString(),
-    expectedReturnDate: expectedReturnDate || 'N/A',
+    serialNumber:       device.serialNumber || '',
+    assignedDate:       fmtDate(now),
+    expectedReturnDate: fmtDate(returnTs),
+    holderName:         actorUser.fullName,
   });
 
-  return { success: true, device, request: toRequest(await getOne(TABLES.REQUESTS(), requestRecordId)) };
+  // Feishu chat notification to employee
+  if (empUser?.email) {
+    bot.notifyRequesterApproved({
+      email:        empUser.email,
+      requesterName:reqData.employeeName,
+      brand:        device.brand,
+      model:        device.deviceModel,
+      imei:         device.imei1,
+      serialNumber: device.serialNumber || '',
+      assignedDate: fmtDate(now),
+      returnDate:   fmtDate(returnTs),
+      holderName:   actorUser.fullName,
+    }).catch(e => console.error('[Bot] notifyRequesterApproved:', e.message));
+  }
+
+  return {
+    success: true,
+    device,
+    request: toRequest(await getOne(TABLES.REQUESTS(), requestRecordId)),
+  };
 }
 
-// ── TL rejects a request ──────────────────────────────────────────────────────
+// ── Reject request ────────────────────────────────────────────────────────────
 async function rejectRequest(requestRecordId, { reason }, actorUser) {
   const reqRecord = await getOne(TABLES.REQUESTS(), requestRecordId);
   if (!reqRecord) throw new Error('Request not found');
-  const req = toRequest(reqRecord);
+  const reqData = toRequest(reqRecord);
 
   await updateOne(TABLES.REQUESTS(), requestRecordId, {
     'Request Status': { text: REQUEST_STATUS.REJECTED, type: 'text' },
@@ -167,23 +218,38 @@ async function rejectRequest(requestRecordId, { reason }, actorUser) {
     'TL Decision Date': Date.now(),
   });
 
-  await audit.log({ ...actorUser, action: AUDIT_ACTIONS.REQUEST_REJECTED, entityType: 'Request', entityId: requestRecordId, prevValue: { status: req.requestStatus }, newValue: { status: REQUEST_STATUS.REJECTED, reason } });
+  await audit.log({
+    ...actorUser, action: AUDIT_ACTIONS.REQUEST_REJECTED,
+    entityType: 'Request', entityId: requestRecordId,
+    prevValue: { status: reqData.requestStatus }, newValue: { status: REQUEST_STATUS.REJECTED, reason },
+  });
 
-  // Notify employee
-  const empUser = await usrSvc.getUserByEmployeeId(req.employeeId);
+  const empUser = await usrSvc.getUserByEmployeeId(reqData.employeeId);
   await notif.notifyRequestRejected({
-    employeeName: req.employeeName,
-    employeeId:   req.employeeId,
+    employeeName: reqData.employeeName,
+    employeeId:   reqData.employeeId,
     email:        empUser?.email || '',
-    brand:        req.preferredBrand,
-    model:        req.preferredModel,
+    brand:        reqData.preferredBrand,
+    model:        reqData.preferredModel,
     reason:       reason || 'No reason provided',
   });
+
+  // Feishu chat notification to employee
+  if (empUser?.email) {
+    bot.notifyRequesterRejected({
+      email:        empUser.email,
+      requesterName:reqData.employeeName,
+      brand:        reqData.preferredBrand || '',
+      model:        reqData.preferredModel || '',
+      reason:       reason || 'No reason provided',
+      holderName:   actorUser.fullName,
+    }).catch(e => console.error('[Bot] notifyRequesterRejected:', e.message));
+  }
 
   return { success: true };
 }
 
-// ── TL asks for clarification ─────────────────────────────────────────────────
+// ── Ask for clarification ─────────────────────────────────────────────────────
 async function requestClarification(requestRecordId, { message }, actorUser) {
   await updateOne(TABLES.REQUESTS(), requestRecordId, {
     'Request Status': { text: REQUEST_STATUS.PENDING_CLARIFICATION, type: 'text' },
@@ -198,7 +264,6 @@ async function listRequests({ employeeId, status, pageSize = 50, pageToken } = {
   if (employeeId) filters.push(`CurrentValue.[Employee ID] = "${employeeId}"`);
   if (status)     filters.push(`CurrentValue.[Request Status] = "${status}"`);
   const filter = filters.length > 1 ? `AND(${filters.join(',')})` : filters[0];
-
   const result = await listPage(TABLES.REQUESTS(), { filter, pageSize, pageToken });
   return { ...result, items: result.items.map(toRequest) };
 }

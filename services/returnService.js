@@ -84,6 +84,56 @@ async function submitReturn({ inventoryRecordId, physicalCondition, accessoriesP
 
   await audit.log({ ...actorUser, action: AUDIT_ACTIONS.RETURN, entityType: 'Inventory', entityId: inventoryRecordId, prevValue: { status: DEVICE_STATUS.ASSIGNED }, newValue: { status: newDeviceStatus } });
 
+  // Send thank-you email to employee + notify inventory holder
+  try {
+    const usrSvc = require('./userService');
+    const notif  = require('./notificationService');
+    const fmtDate = (ts) => ts ? new Date(ts).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—';
+    const empUser = await usrSvc.getUserByEmployeeId(actorUser.employeeId);
+    const allUsers = await usrSvc.listUsers();
+    const holder   = allUsers.find(u => u.role === 'InventoryHolder' || u.role === 'Admin');
+    await notif.notifyDeviceReturned({
+      employeeName: actorUser.fullName,
+      employeeId:   actorUser.employeeId,
+      email:        empUser?.email || '',
+      brand:        device.brand,
+      model:        device.deviceModel,
+      imei:         device.imei1,
+      returnDate:   fmtDate(now),
+      condition:    physicalCondition || 'Good',
+      holderName:   holder?.fullName  || 'Inventory Team',
+      holderEmail:  holder?.email     || '',
+      holderId:     holder?.employeeId|| '',
+    });
+
+    // Feishu chat notifications
+    const bot = require('./feishuBotService');
+    // Thank-you to employee
+    if (empUser?.email) {
+      bot.notifyEmployeeReturned({
+        email:        empUser.email,
+        employeeName: actorUser.fullName,
+        brand:        device.brand,
+        model:        device.deviceModel,
+        imei:         device.imei1,
+        returnDate:   fmtDate(now),
+        condition:    physicalCondition || 'Good',
+      }).catch(e => console.error('[Bot] notifyEmployeeReturned:', e.message));
+    }
+    // Alert to inventory holder
+    if (holder?.email) {
+      bot.notifyHolderReturnReceived({
+        holderEmail:  holder.email,
+        employeeName: actorUser.fullName,
+        employeeId:   actorUser.employeeId,
+        brand:        device.brand,
+        model:        device.deviceModel,
+        imei:         device.imei1,
+        condition:    physicalCondition || 'Good',
+      }).catch(e => console.error('[Bot] notifyHolderReturnReceived:', e.message));
+    }
+  } catch(e) { console.error('[Return notification]', e.message); }
+
   return toReturn(returnRecord);
 }
 
