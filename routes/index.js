@@ -67,6 +67,46 @@ router.get('/users', authenticate, adminOnly, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// PATCH /api/users/:recordId/profile  (Admin — edit role/dept/TL)
+router.patch('/users/:recordId/profile', authenticate, adminOnly, async (req, res, next) => {
+  try {
+    const { role, department, tlEmployeeId } = req.body;
+    const { updateOne } = require('../utils/bitable');
+    const fields = {};
+    if (role)         fields['Role']           = role;
+    if (department !== undefined) fields['Department'] = department;
+    if (tlEmployeeId !== undefined) fields['TL Employee ID'] = tlEmployeeId;
+    await updateOne(TABLES.USERS(), req.params.recordId, fields);
+    const { log } = require('../services/auditService');
+    await log({ ...req.user, action: 'StatusChange', entityType: 'User', entityId: req.params.recordId, newValue: { role, department } });
+    res.json({ success: true, message: 'User updated' });
+  } catch (err) { next(err); }
+});
+
+// PATCH /api/users/:recordId/status  (Admin — activate/deactivate)
+router.patch('/users/:recordId/status', authenticate, adminOnly, async (req, res, next) => {
+  try {
+    const { isActive } = req.body;
+    const { updateOne } = require('../utils/bitable');
+    await updateOne(TABLES.USERS(), req.params.recordId, { 'Is Active': Boolean(isActive) });
+    const { log } = require('../services/auditService');
+    await log({ ...req.user, action: 'StatusChange', entityType: 'User', entityId: req.params.recordId, newValue: { isActive } });
+    res.json({ success: true, message: `User ${isActive ? 'activated' : 'deactivated'}` });
+  } catch (err) { next(err); }
+});
+
+// PATCH /api/users/:employeeId/email  (Admin only)
+router.patch('/users/:employeeId/email', authenticate, adminOnly, async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    const userRecord = await usrSvc.findUserRecord(req.params.employeeId);
+    if (!userRecord) return res.status(404).json({ success: false, message: 'User not found' });
+    const { updateOne } = require('../utils/bitable');
+    await updateOne(TABLES.USERS(), userRecord._recordId, { 'Email': email });
+    res.json({ success: true, message: 'Email updated', employeeId: req.params.employeeId, email });
+  } catch (err) { next(err); }
+});
+
 // ════════════════════════════════════════════════════════════════════════════
 // INVENTORY
 // ════════════════════════════════════════════════════════════════════════════
@@ -118,14 +158,36 @@ router.post('/inventory', authenticate, adminOrHolder, validate([
   } catch (err) { next(err); }
 });
 
-// POST /api/inventory/bulk-upload  (Admin/InventoryHolder)
+// POST /api/inventory/bulk-upload — streaming SSE progress for large files
 router.post('/inventory/bulk-upload', authenticate, adminOrHolder, upload.single('file'), async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded. Field name: file' });
+
+    // Use SSE to stream progress back to client
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const send = (type, data) => {
+      res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`);
+    };
+
     const adminUsers = await usrSvc.listUsers();
-    const admin      = adminUsers.find(u => u.role === ROLES.ADMIN);
-    const summary = await invSvc.bulkUpload(req.file.buffer, req.user, admin?.email);
-    res.json({ success: true, summary });
+    const admin = adminUsers.find(u => u.role === ROLES.ADMIN);
+
+    try {
+      const summary = await invSvc.bulkUpload(
+        req.file.buffer,
+        req.user,
+        admin?.email,
+        (msg) => send('progress', { message: msg })
+      );
+      send('complete', { success: true, summary });
+    } catch (err) {
+      send('error', { success: false, message: err.message });
+    }
+    res.end();
   } catch (err) { next(err); }
 });
 
