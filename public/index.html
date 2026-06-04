@@ -901,7 +901,6 @@ async function renderDupLog() {
 
 // ── Benchmark Inventory ──────────────────────────────────────────────────────
 async function renderBenchmark() {
-  if (!TABLES.BENCHMARK) { show('<div class="empty">Benchmark table not configured yet. Run setup to add it.</div>'); return; }
   show('<div class="loading">Loading benchmark inventory...</div>');
   try {
     const d = await req('GET', '/api/benchmark?pageSize=100');
