@@ -67,19 +67,52 @@ router.get('/users', authenticate, adminOnly, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// PATCH /api/users/:recordId/profile  (Admin — edit role/dept/TL)
+// PATCH /api/users/:recordId/profile  (Admin — edit full profile)
 router.patch('/users/:recordId/profile', authenticate, adminOnly, async (req, res, next) => {
   try {
-    const { role, department, tlEmployeeId } = req.body;
+    const { fullName, email, role, department } = req.body;
     const { updateOne } = require('../utils/bitable');
     const fields = {};
-    if (role)         fields['Role']           = role;
-    if (department !== undefined) fields['Department'] = department;
-    if (tlEmployeeId !== undefined) fields['TL Employee ID'] = tlEmployeeId;
+    if (fullName   !== undefined) fields['Full Name']   = fullName;
+    if (email      !== undefined) fields['Email']       = email;
+    if (role       !== undefined) fields['Role']        = role;
+    if (department !== undefined) fields['Department']  = department;
     await updateOne(TABLES.USERS(), req.params.recordId, fields);
     const { log } = require('../services/auditService');
-    await log({ ...req.user, action: 'StatusChange', entityType: 'User', entityId: req.params.recordId, newValue: { role, department } });
-    res.json({ success: true, message: 'User updated' });
+    await log({ ...req.user, action: 'StatusChange', entityType: 'User', entityId: req.params.recordId, newValue: { fullName, email, role, department } });
+    res.json({ success: true, message: 'Profile updated' });
+  } catch (err) { next(err); }
+});
+
+// PATCH /api/users/:recordId/reset-password  (Admin — reset any user's password)
+router.patch('/users/:recordId/reset-password', authenticate, adminOnly, async (req, res, next) => {
+  try {
+    const { newPassword } = req.body;
+    if (!newPassword || newPassword.length < 8) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 8 characters' });
+    }
+    const bcrypt = require('bcryptjs');
+    const hash   = await bcrypt.hash(newPassword, 12);
+    const { updateOne } = require('../utils/bitable');
+    await updateOne(TABLES.USERS(), req.params.recordId, { 'Password Hash': hash });
+    const { log } = require('../services/auditService');
+    await log({ ...req.user, action: 'StatusChange', entityType: 'User', entityId: req.params.recordId, newValue: { action: 'PasswordReset' } });
+    res.json({ success: true, message: 'Password reset successfully' });
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/users/:recordId  (Admin — soft delete by marking inactive + flagging)
+router.delete('/users/:recordId', authenticate, adminOnly, async (req, res, next) => {
+  try {
+    const { updateOne } = require('../utils/bitable');
+    // Soft delete — we never hard delete (audit trail integrity)
+    await updateOne(TABLES.USERS(), req.params.recordId, {
+      'Is Active':   false,
+      'Department':  '[DELETED]',
+    });
+    const { log } = require('../services/auditService');
+    await log({ ...req.user, action: 'StatusChange', entityType: 'User', entityId: req.params.recordId, newValue: { action: 'Deleted' } });
+    res.json({ success: true, message: 'User profile deleted' });
   } catch (err) { next(err); }
 });
 

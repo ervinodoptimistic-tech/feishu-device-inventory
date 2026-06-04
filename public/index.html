@@ -872,7 +872,7 @@ async function validateReturn(retId, currentCond) {
 
 // ── Users ─────────────────────────────────────────────────────────────────────
 async function renderUsers() {
-  show(`<div class="table-wrap">${skelRows(5,7)}</div>`);
+  show(`<div class="table-wrap">${skelRows(5,6)}</div>`);
   const d = await cachedReq('/api/users', 30000);
   const users = d.data || [];
   show(`
@@ -887,26 +887,38 @@ async function renderUsers() {
       <div style="overflow-x:auto">
       <table id="userTbl">
         <thead><tr>
-          <th>Full Name</th><th>Employee ID</th><th>Role</th>
-          <th>Department</th><th>TL ID</th><th>Status</th><th>Actions</th>
+          <th>Full Name</th><th>Employee ID</th><th>Email</th>
+          <th>Role</th><th>Department</th><th>Status</th><th>Actions</th>
         </tr></thead>
         <tbody>${users.length ? users.map(u=>`
           <tr>
             <td style="font-weight:500">${u.fullName}</td>
             <td style="font-family:monospace;font-size:12px">${u.employeeId}</td>
+            <td style="font-size:12px;color:#666">${u.email||'—'}</td>
             <td><span class="badge ${badgeClass(u.role)}">${u.role}</span></td>
             <td>${u.department||'—'}</td>
-            <td>${u.tlEmployeeId||'—'}</td>
             <td>${u.isActive
               ? '<span class="status-pill pill-available">Active</span>'
               : '<span class="status-pill pill-damaged">Inactive</span>'}</td>
             <td>
-              <button class="btn btn-sm" onclick="editUser('${u.recordId}','${u.fullName}','${u.role}','${u.department||''}','${u.tlEmployeeId||''}')"
-                style="margin-right:4px">✏️ Edit</button>
-              <button class="btn btn-sm ${u.isActive?'btn-danger':''}"
-                onclick="toggleUser('${u.recordId}','${u.employeeId}','${u.isActive}','${u.fullName}')">
-                ${u.isActive?'🔒 Deactivate':'🔓 Activate'}
-              </button>
+              <div style="display:flex;gap:4px;flex-wrap:wrap">
+                <button class="btn btn-sm" title="Edit profile"
+                  onclick="openEditUser(${JSON.stringify({recordId:u.recordId,fullName:u.fullName,email:u.email||'',role:u.role,department:u.department||'',employeeId:u.employeeId}).replace(/"/g,'&quot;')})">
+                  ✏️ Edit
+                </button>
+                <button class="btn btn-sm" title="Reset password"
+                  onclick="resetPassword('${u.recordId}','${u.fullName}')">
+                  🔑 Reset
+                </button>
+                <button class="btn btn-sm ${u.isActive?'btn-danger':''}" title="${u.isActive?'Deactivate':'Activate'}"
+                  onclick="toggleUser('${u.recordId}','${u.isActive}','${u.fullName}')">
+                  ${u.isActive?'🔒':'🔓'}
+                </button>
+                <button class="btn btn-sm btn-danger" title="Delete profile"
+                  onclick="deleteUser('${u.recordId}','${u.employeeId}','${u.fullName}')">
+                  🗑️
+                </button>
+              </div>
             </td>
           </tr>`).join('') : '<tr><td colspan="7" class="empty">No users found</td></tr>'}
         </tbody>
@@ -915,32 +927,38 @@ async function renderUsers() {
     </div>`);
 }
 
-function editUser(recordId, fullName, role, dept, tlId) {
+// ── Edit User Modal ───────────────────────────────────────────────────────────
+function openEditUser(u) {
   const modal = document.createElement('div');
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999;display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:999;display:flex;align-items:center;justify-content:center;padding:16px';
   modal.innerHTML = `
-    <div style="background:#fff;border-radius:12px;padding:24px;width:100%;max-width:400px">
-      <h3 style="font-size:15px;font-weight:500;margin-bottom:4px">✏️ Edit User</h3>
-      <p style="font-size:13px;color:#888;margin-bottom:16px">${fullName}</p>
+    <div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:440px;max-height:90vh;overflow-y:auto">
+      <h3 style="font-size:15px;font-weight:600;margin-bottom:2px">✏️ Edit Profile</h3>
+      <p style="font-size:12px;color:#888;margin-bottom:16px">Employee ID: ${u.employeeId}</p>
       <div id="editUserErr" class="alert"></div>
-      <div class="form-group"><label>Role</label>
-        <select id="editRole" style="width:100%;height:40px;border:1px solid #ddd;border-radius:8px;padding:0 10px;font-size:13px">
-          <option ${role==='Admin'?'selected':''}>Admin</option>
-          <option ${role==='TL'?'selected':''}>TL</option>
-          <option ${role==='InventoryHolder'?'selected':''}>InventoryHolder</option>
-          <option ${role==='Employee'?'selected':''}>Employee</option>
-          <option ${role==='BenchmarkViewer'?'selected':''}>BenchmarkViewer</option>
+
+      <div class="form-group"><label>Full Name *</label>
+        <input id="eu_name" value="${u.fullName||''}"
+          style="width:100%;height:40px;border:1px solid #ddd;border-radius:8px;padding:0 12px;font-size:13px">
+      </div>
+      <div class="form-group"><label>Email *</label>
+        <input id="eu_email" type="email" value="${u.email||''}"
+          style="width:100%;height:40px;border:1px solid #ddd;border-radius:8px;padding:0 12px;font-size:13px">
+      </div>
+      <div class="form-group"><label>Role *</label>
+        <select id="eu_role" style="width:100%;height:40px;border:1px solid #ddd;border-radius:8px;padding:0 10px;font-size:13px">
+          ${['Admin','TL','InventoryHolder','Employee','BenchmarkViewer'].map(r=>
+            `<option ${r===u.role?'selected':''}>${r}</option>`).join('')}
         </select>
       </div>
       <div class="form-group"><label>Department</label>
-        <input id="editDept" value="${dept}" style="width:100%;height:40px;border:1px solid #ddd;border-radius:8px;padding:0 12px;font-size:13px">
-      </div>
-      <div class="form-group"><label>TL Employee ID</label>
-        <input id="editTL" value="${tlId}" style="width:100%;height:40px;border:1px solid #ddd;border-radius:8px;padding:0 12px;font-size:13px" placeholder="TL's Employee ID">
+        <input id="eu_dept" value="${u.department||''}"
+          style="width:100%;height:40px;border:1px solid #ddd;border-radius:8px;padding:0 12px;font-size:13px"
+          placeholder="e.g. QA, Engineering, R&D">
       </div>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
-        <button class="btn btn-outline" onclick="this.closest('div[style]').remove()">Cancel</button>
-        <button class="btn" onclick="saveEditUser('${recordId}',this.closest('div[style]'))">Save Changes</button>
+        <button class="btn btn-outline btn-sm" onclick="this.closest('div[style*=fixed]').remove()">Cancel</button>
+        <button class="btn btn-sm" onclick="saveEditUser('${u.recordId}',this.closest('div[style*=fixed]'))">💾 Save</button>
       </div>
     </div>`;
   document.body.appendChild(modal);
@@ -948,28 +966,92 @@ function editUser(recordId, fullName, role, dept, tlId) {
 }
 
 async function saveEditUser(recordId, modal) {
-  const err = document.getElementById('editUserErr');
-  const role = document.getElementById('editRole').value;
-  const dept = document.getElementById('editDept').value.trim();
-  const tlId = document.getElementById('editTL').value.trim();
+  const err  = document.getElementById('editUserErr');
+  const name = document.getElementById('eu_name').value.trim();
+  const email= document.getElementById('eu_email').value.trim();
+  const role = document.getElementById('eu_role').value;
+  const dept = document.getElementById('eu_dept').value.trim();
+  if (!name || !email) { showErr(err,'Full Name and Email are required'); return; }
   try {
-    const d = await req('PATCH', `/api/users/${recordId}/profile`, { role, department: dept, tlEmployeeId: tlId });
-    if (d.success) {
-      clearCache('/api/users');
-      modal.remove();
-      renderUsers();
-    } else showErr(err, d.message || 'Update failed');
-  } catch(e) { showErr(err, 'Update failed: ' + e.message); }
+    const d = await req('PATCH', `/api/users/${recordId}/profile`, { fullName: name, email, role, department: dept });
+    if (d.success) { clearCache('/api/users'); modal.remove(); renderUsers(); }
+    else showErr(err, d.message || 'Update failed');
+  } catch(e) { showErr(err, 'Error: ' + e.message); }
 }
 
-async function toggleUser(recordId, employeeId, isActive, fullName) {
-  const action = isActive === 'true' ? 'deactivate' : 'activate';
-  if (!confirm(`${action === 'deactivate' ? 'Deactivate' : 'Activate'} user ${fullName}?`)) return;
+// ── Reset Password ────────────────────────────────────────────────────────────
+function resetPassword(recordId, fullName) {
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:999;display:flex;align-items:center;justify-content:center;padding:16px';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:14px;padding:24px;width:100%;max-width:380px">
+      <h3 style="font-size:15px;font-weight:600;margin-bottom:2px">🔑 Reset Password</h3>
+      <p style="font-size:12px;color:#888;margin-bottom:16px">${fullName}</p>
+      <div id="resetErr" class="alert"></div>
+      <div class="form-group"><label>New Password * (min 8 characters)</label>
+        <input id="newPwd" type="password" placeholder="Enter new password"
+          style="width:100%;height:40px;border:1px solid #ddd;border-radius:8px;padding:0 12px;font-size:13px">
+      </div>
+      <div class="form-group"><label>Confirm Password *</label>
+        <input id="confirmPwd" type="password" placeholder="Re-enter new password"
+          style="width:100%;height:40px;border:1px solid #ddd;border-radius:8px;padding:0 12px;font-size:13px">
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+        <button class="btn btn-outline btn-sm" onclick="this.closest('div[style*=fixed]').remove()">Cancel</button>
+        <button class="btn btn-sm" onclick="doResetPassword('${recordId}',this.closest('div[style*=fixed]'))">🔑 Reset</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
+}
+
+async function doResetPassword(recordId, modal) {
+  const err  = document.getElementById('resetErr');
+  const pwd  = document.getElementById('newPwd').value;
+  const conf = document.getElementById('confirmPwd').value;
+  if (!pwd || pwd.length < 8) { showErr(err,'Password must be at least 8 characters'); return; }
+  if (pwd !== conf) { showErr(err,'Passwords do not match'); return; }
   try {
-    const d = await req('PATCH', `/api/users/${recordId}/status`, { isActive: action === 'activate' });
+    const d = await req('PATCH', `/api/users/${recordId}/reset-password`, { newPassword: pwd });
+    if (d.success) {
+      modal.remove();
+      // Show success toast
+      const toast = document.createElement('div');
+      toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#137333;color:#fff;padding:12px 24px;border-radius:8px;font-size:13px;z-index:9999;font-weight:500';
+      toast.textContent = '✅ Password reset successfully';
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    } else showErr(err, d.message || 'Reset failed');
+  } catch(e) { showErr(err, 'Error: ' + e.message); }
+}
+
+// ── Toggle Active/Inactive ────────────────────────────────────────────────────
+async function toggleUser(recordId, isActive, fullName) {
+  const activate = isActive === 'false' || isActive === false;
+  const action   = activate ? 'Activate' : 'Deactivate';
+  if (!confirm(`${action} user "${fullName}"?`)) return;
+  try {
+    const d = await req('PATCH', `/api/users/${recordId}/status`, { isActive: activate });
     if (d.success) { clearCache('/api/users'); renderUsers(); }
     else alert(d.message || 'Failed');
-  } catch(e) { alert('Failed: ' + e.message); }
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+// ── Delete User ───────────────────────────────────────────────────────────────
+async function deleteUser(recordId, employeeId, fullName) {
+  const confirm1 = confirm(`⚠️ Delete user "${fullName}" (${employeeId})?
+
+This marks their profile as deleted. All their activity history is preserved in the audit log.`);
+  if (!confirm1) return;
+  const confirm2 = confirm(`Are you absolutely sure? Type OK to confirm deletion of ${fullName}.`);
+  if (!confirm2) return;
+  try {
+    const d = await req('DELETE', `/api/users/${recordId}`);
+    if (d.success) {
+      clearCache('/api/users');
+      renderUsers();
+    } else alert(d.message || 'Delete failed');
+  } catch(e) { alert('Error: ' + e.message); }
 }
 
 
