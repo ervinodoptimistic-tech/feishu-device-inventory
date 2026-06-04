@@ -1061,43 +1061,110 @@ function renderNewUser() {
     <div class="page-title">👤 Register New User</div>
     <div class="form-card">
       <h3>Employee Details</h3>
+      <p style="font-size:12px;color:#888;margin-bottom:14px">Fields marked * are mandatory</p>
       <div id="userMsg" class="alert"></div>
       <div class="form-row">
-        <div class="form-group"><label>Full Name *</label><input id="uName" placeholder="Full name"></div>
-        <div class="form-group"><label>Employee ID *</label><input id="uEmpId" placeholder="e.g. EMP001"></div>
+        <div class="form-group">
+          <label>Full Name *</label>
+          <input id="uName" placeholder="Full name">
+        </div>
+        <div class="form-group">
+          <label>Employee ID *</label>
+          <input id="uEmpId" placeholder="e.g. EMP001" oninput="checkEmpId(this.value)">
+          <div id="empIdStatus" style="font-size:11px;margin-top:3px;min-height:14px"></div>
+        </div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label>Email *</label><input id="uEmail" type="email" placeholder="employee@transsion.com"></div>
-        <div class="form-group"><label>Password *</label><input id="uPw" type="password" placeholder="Min 8 characters"></div>
+        <div class="form-group">
+          <label>Email *</label>
+          <input id="uEmail" type="email" placeholder="employee@transsion.com">
+        </div>
+        <div class="form-group">
+          <label>Password *</label>
+          <input id="uPw" type="password" placeholder="Min 8 characters">
+        </div>
       </div>
       <div class="form-row">
         <div class="form-group"><label>Role *</label>
-          <select id="uRole"><option>Employee</option><option>TL</option><option>InventoryHolder</option><option>Admin</option></select>
+          <select id="uRole">
+            <option>Employee</option>
+            <option>TL</option>
+            <option>InventoryHolder</option>
+            <option>Admin</option>
+            <option>BenchmarkViewer</option>
+          </select>
         </div>
-        <div class="form-group"><label>Department</label><input id="uDept" placeholder="e.g. QA, Engineering"></div>
+        <div class="form-group"><label>Department</label>
+          <input id="uDept" placeholder="e.g. QA, R&D, Engineering">
+        </div>
       </div>
-      <div class="form-group"><label>TL Employee ID (for Employees)</label>
-        <input id="uTL" placeholder="Their TL's Employee ID e.g. TL001"></div>
-      <button class="btn" onclick="registerUser()">Register Employee</button>
+      <button class="btn" id="registerBtn" onclick="registerUser()">Register Employee</button>
     </div>`);
 }
 
+// Live Employee ID duplicate check
+let _empCheckTimer = null;
+async function checkEmpId(val) {
+  const statusEl = document.getElementById('empIdStatus');
+  const btn = document.getElementById('registerBtn');
+  if (!val || val.length < 2) { statusEl.textContent = ''; return; }
+  clearTimeout(_empCheckTimer);
+  statusEl.innerHTML = '<span style="color:#888">⏳ Checking...</span>';
+  _empCheckTimer = setTimeout(async () => {
+    try {
+      const d = await req('GET', `/api/users/check/${encodeURIComponent(val)}`);
+      if (d.exists) {
+        statusEl.innerHTML = `<span style="color:#c62828">❌ Employee ID already registered to: <strong>${d.user?.fullName}</strong> (${d.user?.role})</span>`;
+        if (btn) btn.disabled = true;
+      } else {
+        statusEl.innerHTML = '<span style="color:#137333">✅ Employee ID is available</span>';
+        if (btn) btn.disabled = false;
+      }
+    } catch(e) { statusEl.textContent = ''; }
+  }, 600);
+}
+
 async function registerUser() {
-  const msg = document.getElementById('userMsg');
-  const name = document.getElementById('uName').value.trim();
-  const empId= document.getElementById('uEmpId').value.trim();
-  const email= document.getElementById('uEmail').value.trim();
-  const pw   = document.getElementById('uPw').value;
-  if (!name||!empId||!email||!pw) { showErr(msg,'All fields marked * are required'); return; }
+  const msg    = document.getElementById('userMsg');
+  const name   = document.getElementById('uName').value.trim();
+  const empId  = document.getElementById('uEmpId').value.trim();
+  const email  = document.getElementById('uEmail').value.trim();
+  const pw     = document.getElementById('uPw').value;
+  const status = document.getElementById('empIdStatus');
+
+  if (!name || !empId || !email || !pw) { showErr(msg,'All fields marked * are required'); return; }
+  if (pw.length < 8) { showErr(msg,'Password must be at least 8 characters'); return; }
+
+  // Block if duplicate detected
+  if (status && status.innerHTML.includes('already registered')) {
+    showErr(msg,'This Employee ID is already taken. Please use a different one.'); return;
+  }
+
+  const btn = document.getElementById('registerBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Registering...'; }
+
   const d = await req('POST', '/api/auth/register', {
     fullName: name, employeeId: empId, email, password: pw,
-    role: document.getElementById('uRole').value,
+    role:       document.getElementById('uRole').value,
     department: document.getElementById('uDept').value,
-    tlEmployeeId: document.getElementById('uTL').value,
   });
-  if (d.success) { clearCache('/api/users'); showOk(msg,`✅ ${name} registered successfully!`); setTimeout(()=>navigate('users'),2000); }
-  else showErr(msg, d.message || 'Registration failed');
+
+  if (btn) { btn.disabled = false; btn.textContent = 'Register Employee'; }
+
+  if (d.success) {
+    showOk(msg, `✅ ${name} registered successfully!`);
+    clearCache('/api/users');
+    // Clear form
+    ['uName','uEmpId','uEmail','uPw','uDept'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    document.getElementById('empIdStatus').textContent = '';
+    setTimeout(() => navigate('users'), 2000);
+  } else {
+    showErr(msg, d.message || 'Registration failed');
+  }
 }
+
 
 // ── Reports ───────────────────────────────────────────────────────────────────
 function renderReports() {

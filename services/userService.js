@@ -29,8 +29,12 @@ async function findUserRecord(employeeId) {
 }
 
 async function register({ employeeId, fullName, email, password, role, department, tlEmployeeId }) {
-  const existing = await findByEmployeeId(employeeId);
-  if (existing) throw new Error(`Employee ID ${employeeId} already registered`);
+  // Check both Employee ID AND email for duplicates
+  const existingById    = await findByEmployeeId(employeeId);
+  if (existingById) throw new Error(`Employee ID "${employeeId}" is already registered. Use a different Employee ID.`);
+
+  const existingByEmail = await findFirst(TABLES.USERS(), `CurrentValue.[Email] = "${email}"`);
+  if (existingByEmail) throw new Error(`Email "${email}" is already registered to another user.`);
 
   const hash = await bcrypt.hash(password, 12);
   const record = await createOne(TABLES.USERS(), {
@@ -38,7 +42,7 @@ async function register({ employeeId, fullName, email, password, role, departmen
     'Full Name':      fullName,
     'Email':          email,
     'Password Hash':  hash,
-    'Role':           role || ROLES.EMPLOYEE,
+    'Role':           { text: role || ROLES.EMPLOYEE, type: 'text' },
     'Department':     department  || '',
     'TL Employee ID': tlEmployeeId || '',
     'Is Active':      true,

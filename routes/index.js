@@ -59,6 +59,14 @@ router.get('/auth/me', authenticate, (req, res) => {
   res.json({ success: true, user: req.user });
 });
 
+// GET /api/users/check/:employeeId  (Admin — check if ID exists before registering)
+router.get('/users/check/:employeeId', authenticate, adminOnly, async (req, res, next) => {
+  try {
+    const user = await usrSvc.getUserByEmployeeId(req.params.employeeId);
+    res.json({ success: true, exists: !!user, user: user ? { fullName: user.fullName, role: user.role } : null });
+  } catch (err) { next(err); }
+});
+
 // GET /api/users  (Admin only)
 router.get('/users', authenticate, adminOnly, async (req, res, next) => {
   try {
