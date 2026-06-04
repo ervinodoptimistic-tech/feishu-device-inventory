@@ -11,8 +11,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .header-left{display:flex;align-items:center;gap:10px}
 .header h1{font-size:17px;font-weight:500}
 .header .sub{font-size:12px;opacity:.8}
-.back-btn{background:rgba(255,255,255,.2);border:none;color:#fff;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px;display:none;align-items:center;gap:4px}
-.back-btn.show{display:flex}
+.back-btn{background:rgba(255,255,255,.2);border:none;color:#fff;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px;display:none;align-items:center;gap:4px;white-space:nowrap}
 .container{max-width:900px;margin:0 auto;padding:16px}
 /* Cards */
 .grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:16px}
@@ -121,6 +120,12 @@ tr:hover td{background:#fafafa}
 .report-btns{display:flex;gap:8px;justify-content:center}
 /* Notification dot */
 .dot{width:8px;height:8px;background:#ea4335;border-radius:50%;display:inline-block;margin-left:4px;vertical-align:middle}
+/* Skeleton shimmer */
+.skel{background:linear-gradient(90deg,#f0f0f0 25%,#e8e8e8 50%,#f0f0f0 75%);background-size:200% 100%;animation:shimmer 1.4s infinite;display:block}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+/* Page fade in */
+#app{animation:fadeIn .12s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
 </style>
 </head>
 <body>
@@ -144,13 +149,45 @@ let TOKEN = localStorage.getItem('inv_token');
 let USER  = JSON.parse(localStorage.getItem('inv_user') || 'null');
 let pageStack = [];
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+// ── Cache (TTL-based, auto-clears) ───────────────────────────────────────────
+const _cache = {};
+async function cachedReq(path, ttl = 45000) {
+  const now = Date.now();
+  if (_cache[path] && (now - _cache[path].ts) < ttl) return _cache[path].data;
+  const data = await req('GET', path);
+  if (data && (data.success !== false)) _cache[path] = { data, ts: now };
+  return data;
+}
+function clearCache(prefix) {
+  Object.keys(_cache).forEach(k => { if (!prefix || k.includes(prefix)) delete _cache[k]; });
+}
+// Auto-clear all cache every 5 minutes
+setInterval(() => { Object.keys(_cache).forEach(k => delete _cache[k]); }, 300000);
+
+// ── Skeleton helpers ──────────────────────────────────────────────────────────
+function skelRows(n=6, cols=5) {
+  const row = `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:8px;margin-bottom:8px">${Array(cols).fill('<div class="skel" style="height:36px;border-radius:6px"></div>').join('')}</div>`;
+  return `<div style="padding:12px 16px">${Array(n).fill(row).join('')}</div>`;
+}
+function skelStats(n=4) {
+  return `<div class="stats-grid">${Array(n).fill('<div class="skel" style="height:72px;border-radius:10px"></div>').join('')}</div>`;
+}
+function skelCards(n=4) {
+  return `<div class="grid-2">${Array(n).fill('<div class="skel" style="height:90px;border-radius:12px;margin-bottom:12px"></div>').join('')}</div>`;
+}
+
+// ── helpers ───────────────────────────────────────────────────────────────────
 async function req(method, path, body, isForm) {
-  const opts = { method, headers: { Authorization: `Bearer ${TOKEN}` } };
+  const opts = { method, headers: { Authorization: `Bearer ${TOKEN}` }, signal: AbortSignal.timeout(15000) };
   if (body && !isForm) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
   if (isForm) opts.body = body;
-  const r = await fetch(API + path, opts);
-  return r.json();
+  try {
+    const r = await fetch(API + path, opts);
+    return r.json();
+  } catch(e) {
+    if (e.name === 'TimeoutError') throw new Error('Request timed out. Please check your connection.');
+    throw e;
+  }
 }
 
 function statusPill(s) {
@@ -184,9 +221,15 @@ function navigate(page, push = true) {
   if (push) {
     if (pageStack[pageStack.length-1] !== page) pageStack.push(page);
   }
-  const btn = document.getElementById('backBtn');
-  btn.classList.toggle('show', page !== 'dashboard');
+  updateBackBtn(page);
   renderPage(page);
+}
+
+function updateBackBtn(page) {
+  const btn = document.getElementById('backBtn');
+  if (!btn) return;
+  const show = page && page !== 'dashboard';
+  btn.style.display = show ? 'flex' : 'none';
 }
 
 function goBack() {
@@ -252,7 +295,7 @@ function logout() {
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 function renderDashboard() {
   pageStack = ['dashboard'];
-  document.getElementById('backBtn').classList.remove('show');
+  updateBackBtn('dashboard');
   document.getElementById('headerRight').innerHTML =
     `<div style="text-align:right;font-size:12px;color:rgba(255,255,255,.9)">
       ${USER.fullName}<br><button onclick="logout()" style="background:none;border:none;color:rgba(255,255,255,.7);cursor:pointer;font-size:11px">Sign out</button>
@@ -319,9 +362,10 @@ function renderDashboard() {
 
 // ── Inventory ─────────────────────────────────────────────────────────────────
 async function renderInventory() {
-  show(`<div class="loading">Loading inventory...</div>`);
+  show(`<div class="table-wrap"><div class="table-header"><div class="table-title">📋 Inventory</div></div>${skelRows(8,7)}</div>`);
   const assignedTo = USER.role === 'Employee' ? USER.employeeId : '';
-  const d = await req('GET', `/api/inventory?pageSize=100${assignedTo?'&assignedTo='+assignedTo:''}`);
+  const path = `/api/inventory?pageSize=100${assignedTo?'&assignedTo='+assignedTo:''}`;
+  const d = await cachedReq(path, 30000);
   const items = d.items || [];
   show(`
     <div class="table-wrap">
@@ -340,8 +384,8 @@ async function renderInventory() {
       <div style="overflow-x:auto">
       <table id="invTbl">
         <thead><tr>
-          <th>Brand/Model</th><th>IMEI1</th><th>HW Stage</th>
-          <th>Location</th><th>Status</th><th>Assigned To</th><th>Return Date</th><th>Photo</th>
+          <th>Brand/Model</th><th>IMEI1</th><th>HW Type</th>
+          <th>Location</th><th>Status</th><th>Assigned To</th><th>Return Date</th><th>📷</th><th>Photo</th>
         </tr></thead>
         <tbody>${items.length ? items.map(i=>{
           const f=i.fields||{};
@@ -356,9 +400,12 @@ async function renderInventory() {
           return `<tr data-status="${stat}">
             <td><div style="font-weight:500">${brand}</div><div style="font-size:12px;color:#888">${model}</div></td>
             <td style="font-family:monospace;font-size:12px">${imei1}</td>
-            <td>${stage}</td><td>${loc}</td>
+            <td>${stage||'—'}</td><td>${loc}</td>
             <td>${statusPill(stat)}</td><td>${asgn}</td>
-            <td>${fmtDate(ret)}</td></tr>`;}).join('') : '<tr><td colspan="7" class="empty">No devices found</td></tr>'}
+            <td>${fmtDate(ret)}</td>
+            <td><button class="btn btn-sm" style="padding:0 8px;height:26px;font-size:13px" title="Upload photo"
+              onclick="showImageUpload('${i.recordId}','inventory')">📷</button></td>
+          </tr>`;}).join('') : '<tr><td colspan="7" class="empty">No devices found</td></tr>'}
         </tbody>
       </table>
       </div>
@@ -378,8 +425,8 @@ function filterByStatus(tableId, s) {
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
 async function renderStats() {
-  show(`<div class="loading">Loading dashboard...</div>`);
-  const d = await req('GET', '/api/inventory/dashboard');
+  show(skelStats(4) + '<div class="grid-2">' + skelCards(2) + '</div>');
+  const d = await cachedReq('/api/inventory/dashboard', 60000);
   const s = d.data || {};
   const bs = s.byStatus || {};
   show(`
@@ -414,22 +461,20 @@ function renderUpload() {
     <div class="page-title">⬆️ Bulk Upload</div>
     <div class="form-card">
       <h3>Upload Inventory via Excel/CSV</h3>
-      <p style="font-size:13px;color:#666;margin-bottom:16px">
-        Download the template, fill in your device data, then upload here. 
-        System will validate all fields and detect duplicates automatically.
-      </p>
+      <p style="font-size:13px;color:#666;margin-bottom:4px">Download the template, fill in your device data, then upload here.</p>
+      <p style="font-size:12px;color:#1a73e8;margin-bottom:16px">✅ Optimized for 3000+ rows — validates all rows in one pass, no slowdowns</p>
       <div style="margin-bottom:16px">
         <a href="/inventory_bulk_upload_template.xlsx" download>
-          <button class="btn btn-outline" style="margin-right:8px">📥 Download Template</button>
+          <button class="btn btn-outline">📥 Download Template</button>
         </a>
       </div>
       <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()"
-        ondragover="event.preventDefault();this.classList.add('drag')"
-        ondragleave="this.classList.remove('drag')"
+        ondragover="event.preventDefault();this.style.borderColor='#1a73e8';this.style.background='#e8f0fe'"
+        ondragleave="this.style.borderColor='';this.style.background=''"
         ondrop="handleDrop(event)">
         <div class="upload-icon">📁</div>
-        <div class="upload-text">Click to select file or drag & drop</div>
-        <div class="upload-sub">Supports .xlsx and .csv files</div>
+        <div class="upload-text" id="dropText">Click to select file or drag & drop</div>
+        <div class="upload-sub">Supports .xlsx and .csv • Handles 3000+ rows</div>
       </div>
       <input type="file" id="fileInput" accept=".xlsx,.csv" style="display:none" onchange="uploadFile(this.files[0])">
     </div>
@@ -438,47 +483,124 @@ function renderUpload() {
 
 function handleDrop(e) {
   e.preventDefault();
-  document.getElementById('dropZone').classList.remove('drag');
+  const dz = document.getElementById('dropZone');
+  dz.style.borderColor=''; dz.style.background='';
   const f = e.dataTransfer.files[0];
   if (f) uploadFile(f);
 }
 
 async function uploadFile(file) {
   if (!file) return;
-  const res = document.getElementById('uploadResult');
-  res.innerHTML = `<div class="loading">⏳ Uploading and validating ${file.name}...</div>`;
+  const res   = document.getElementById('uploadResult');
+  const dText = document.getElementById('dropText');
+  if (dText) dText.textContent = `Selected: ${file.name}`;
+
+  res.innerHTML = `
+    <div class="form-card" id="progressCard">
+      <h3>⏳ Processing: ${file.name}</h3>
+      <div id="progressMsg" style="font-size:13px;color:#1a73e8;margin:8px 0">Preparing...</div>
+      <div style="background:#f0f0f0;border-radius:6px;height:10px;overflow:hidden;margin:10px 0">
+        <div id="progressBar" style="height:100%;background:#1a73e8;width:3%;transition:width .5s ease;border-radius:6px"></div>
+      </div>
+      <div id="progressLog" style="font-size:12px;color:#888;margin-top:6px;max-height:80px;overflow-y:auto"></div>
+    </div>`;
+
   const fd = new FormData(); fd.append('file', file);
+  const steps = []; let pct = 3;
+
+  const updateProgress = (msg, newPct) => {
+    pct = newPct || Math.min(pct + 12, 92);
+    steps.push(msg);
+    const bar = document.getElementById('progressBar');
+    const msgEl = document.getElementById('progressMsg');
+    const log = document.getElementById('progressLog');
+    if (bar) bar.style.width = pct + '%';
+    if (msgEl) msgEl.textContent = msg;
+    if (log) log.innerHTML = steps.slice(-4).map(s=>`<div>• ${s}</div>`).join('');
+  };
+
   try {
-    const d = await req('POST', '/api/inventory/bulk-upload', fd, true);
-    if (d.success) {
-      const s = d.summary;
-      res.innerHTML = `
-        <div class="form-card">
-          <h3>✅ Upload Complete — Batch: ${s.batchId}</h3>
-          <div class="stats-grid" style="grid-template-columns:repeat(5,1fr)">
-            <div class="stat-card"><div class="stat-label">Total</div><div class="stat-value">${s.total}</div></div>
-            <div class="stat-card"><div class="stat-label">Success</div><div class="stat-value" style="color:#137333">${s.success}</div></div>
-            <div class="stat-card"><div class="stat-label">Failed</div><div class="stat-value" style="color:#c62828">${s.failed}</div></div>
-            <div class="stat-card"><div class="stat-label">Duplicates</div><div class="stat-value" style="color:#b45309">${s.duplicates}</div></div>
-            <div class="stat-card"><div class="stat-label">Missing Data</div><div class="stat-value" style="color:#888">${s.missingData}</div></div>
-          </div>
-          ${s.errors?.length ? `<div style="margin-top:12px"><strong style="font-size:13px">Failed rows:</strong>
-            <div style="overflow-x:auto;margin-top:8px"><table><thead><tr><th>Row</th><th>Reason</th></tr></thead>
-            <tbody>${s.errors.map(e=>`<tr><td>${e.row}</td><td style="color:#c62828">${e.reason}</td></tr>`).join('')}</tbody></table></div>
-          </div>`:''}
-        </div>`;
+    const response = await fetch(API + '/api/inventory/bulk-upload', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${TOKEN}` },
+      body: fd,
+    });
+
+    const contentType = response.headers.get('content-type') || '';
+
+    // SSE streaming response
+    if (contentType.includes('text/event-stream')) {
+      const reader  = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n'); buf = lines.pop();
+
+        for (const line of lines) {
+          if (!line.startsWith('data:')) continue;
+          try {
+            const evt = JSON.parse(line.slice(5).trim());
+            if (evt.type === 'progress') updateProgress(evt.message);
+            if (evt.type === 'complete') showUploadResult(evt.summary, res);
+            if (evt.type === 'error') res.innerHTML = `<div class="alert alert-error">${evt.message}</div>`;
+          } catch(_) {}
+        }
+      }
     } else {
-      res.innerHTML = `<div class="alert alert-error">${d.message||'Upload failed'}</div>`;
+      // Fallback: regular JSON response
+      updateProgress('Processing...', 50);
+      const d = await response.json();
+      if (d.success) showUploadResult(d.summary, res);
+      else res.innerHTML = `<div class="alert alert-error">${d.message||'Upload failed'}</div>`;
     }
   } catch(e) {
-    res.innerHTML = `<div class="alert alert-error">Upload failed. Please try again.</div>`;
+    res.innerHTML = `<div class="alert alert-error">Upload error: ${e.message}</div>`;
   }
 }
 
+function showUploadResult(s, res) {
+  clearCache('/api/inventory'); clearCache('/api/inventory/dashboard');
+  const bar = document.getElementById('progressBar');
+  if (bar) bar.style.width = '100%';
+  setTimeout(() => {
+    res.innerHTML = `
+      <div class="form-card">
+        <h3 style="color:#137333;margin-bottom:12px">✅ Upload Complete — ${s.batchId}</h3>
+        <div class="stats-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:12px">
+          <div class="stat-card"><div class="stat-label">Total</div><div class="stat-value">${s.total}</div></div>
+          <div class="stat-card"><div class="stat-label">✅ Inserted</div><div class="stat-value" style="color:#137333">${s.success}</div></div>
+          <div class="stat-card"><div class="stat-label">❌ Failed</div><div class="stat-value" style="color:#c62828">${s.failed}</div></div>
+          <div class="stat-card"><div class="stat-label">⚠️ Duplicates</div><div class="stat-value" style="color:#b45309">${s.duplicates}</div></div>
+          <div class="stat-card"><div class="stat-label">📋 Missing</div><div class="stat-value" style="color:#888">${s.missingData||0}</div></div>
+        </div>
+        ${s.errors?.length ? `
+          <details>
+            <summary style="cursor:pointer;font-size:13px;font-weight:500;color:#c62828;margin-bottom:8px">
+              ⚠️ ${s.errors.length} failed rows — click to view
+            </summary>
+            <div style="overflow:auto;max-height:280px">
+              <table><thead><tr><th>Row</th><th>Reason</th></tr></thead>
+              <tbody>${s.errors.slice(0,200).map(e=>
+                `<tr><td>${e.row}</td><td style="color:#c62828;font-size:12px">${e.reason}</td></tr>`
+              ).join('')}
+              ${s.errors.length>200?`<tr><td colspan="2" style="color:#888;font-size:12px;padding:8px">...${s.errors.length-200} more rows</td></tr>`:''}
+              </tbody></table>
+            </div>
+          </details>` : '<p style="color:#137333;font-size:13px">🎉 No errors — all valid rows inserted!</p>'}
+        <button class="btn" style="margin-top:12px" onclick="navigate('inventory')">View Inventory →</button>
+      </div>`;
+  }, 300);
+}
+
+
 // ── Requests (Admin/TL view) ──────────────────────────────────────────────────
 async function renderRequests() {
-  show(`<div class="loading">Loading requests...</div>`);
-  const d = await req('GET', '/api/requests?pageSize=100');
+  show(`<div class="table-wrap"><div class="table-header"><div class="table-title">📝 Requests</div></div>${skelRows(6,7)}</div>`);
+  const d = await cachedReq('/api/requests?pageSize=100', 30000);
   const items = d.items || [];
   show(`
     <div class="table-wrap">
@@ -553,7 +675,7 @@ async function doApprove(reqId, modal) {
   if (!devId) { showErr(err,'Please select a device'); return; }
   if (!retDate) { showErr(err,'Please set a return date'); return; }
   const d = await req('POST', `/api/requests/${reqId}/approve`, { inventoryRecordId: devId, expectedReturnDate: retDate, remarks });
-  if (d.success) { modal.remove(); navigate('requests', false); renderRequests(); }
+  if (d.success) { clearCache('/api/requests'); clearCache('/api/inventory'); modal.remove(); navigate('requests', false); renderRequests(); }
   else showErr(err, d.message || 'Approval failed');
 }
 
@@ -567,8 +689,8 @@ async function rejectRequest(reqId) {
 
 // ── My Requests (Employee) ────────────────────────────────────────────────────
 async function renderMyRequests() {
-  show(`<div class="loading">Loading your requests...</div>`);
-  const d = await req('GET', `/api/requests?employeeId=${USER.employeeId}&pageSize=50`);
+  show(`<div class="table-wrap">${skelRows(4,6)}</div>`);
+  const d = await cachedReq(`/api/requests?employeeId=${USER.employeeId}&pageSize=50`, 30000);
   const items = d.items || [];
   show(`
     <div class="table-wrap">
@@ -643,8 +765,8 @@ async function submitRequest() {
 
 // ── My Devices ────────────────────────────────────────────────────────────────
 async function renderMyDevices() {
-  show(`<div class="loading">Loading your devices...</div>`);
-  const d = await req('GET', `/api/inventory?assignedTo=${USER.employeeId}&pageSize=50`);
+  show(`<div class="table-wrap">${skelRows(4,7)}</div>`);
+  const d = await cachedReq(`/api/inventory?assignedTo=${USER.employeeId}&pageSize=50`, 30000);
   const items = d.items || [];
   show(`
     <div class="page-title">📱 My Assigned Devices</div>
@@ -714,8 +836,8 @@ async function submitReturn() {
 
 // ── Returns (Inventory Holder) ────────────────────────────────────────────────
 async function renderReturns() {
-  show(`<div class="loading">Loading returns...</div>`);
-  const d = await req('GET', '/api/returns?pageSize=100');
+  show(`<div class="table-wrap">${skelRows(5,7)}</div>`);
+  const d = await cachedReq('/api/returns?pageSize=100', 30000);
   const items = d.items || [];
   show(`
     <div class="table-wrap">
@@ -750,30 +872,106 @@ async function validateReturn(retId, currentCond) {
 
 // ── Users ─────────────────────────────────────────────────────────────────────
 async function renderUsers() {
-  show(`<div class="loading">Loading users...</div>`);
-  const d = await req('GET', '/api/users');
+  show(`<div class="table-wrap">${skelRows(5,7)}</div>`);
+  const d = await cachedReq('/api/users', 30000);
   const users = d.data || [];
   show(`
     <div class="table-wrap">
       <div class="table-header">
         <div class="table-title">👥 Users (${users.length})</div>
-        <button class="btn btn-sm" onclick="navigate('newuser')">+ Add User</button>
+        <div style="display:flex;gap:8px">
+          <input class="search-input" placeholder="Search name or ID..." oninput="filterTable('userTbl',this.value)" style="max-width:200px">
+          <button class="btn btn-sm btn-green" onclick="navigate('newuser')">+ Add User</button>
+        </div>
       </div>
-      <table>
-        <thead><tr><th>Employee</th><th>Employee ID</th><th>Role</th><th>Department</th><th>TL ID</th><th>Status</th></tr></thead>
+      <div style="overflow-x:auto">
+      <table id="userTbl">
+        <thead><tr>
+          <th>Full Name</th><th>Employee ID</th><th>Role</th>
+          <th>Department</th><th>TL ID</th><th>Status</th><th>Actions</th>
+        </tr></thead>
         <tbody>${users.length ? users.map(u=>`
           <tr>
             <td style="font-weight:500">${u.fullName}</td>
-            <td style="font-family:monospace">${u.employeeId}</td>
+            <td style="font-family:monospace;font-size:12px">${u.employeeId}</td>
             <td><span class="badge ${badgeClass(u.role)}">${u.role}</span></td>
             <td>${u.department||'—'}</td>
             <td>${u.tlEmployeeId||'—'}</td>
-            <td>${u.isActive?'✅ Active':'❌ Inactive'}</td>
-          </tr>`).join('') : '<tr><td colspan="6" class="empty">No users found</td></tr>'}
+            <td>${u.isActive
+              ? '<span class="status-pill pill-available">Active</span>'
+              : '<span class="status-pill pill-damaged">Inactive</span>'}</td>
+            <td>
+              <button class="btn btn-sm" onclick="editUser('${u.recordId}','${u.fullName}','${u.role}','${u.department||''}','${u.tlEmployeeId||''}')"
+                style="margin-right:4px">✏️ Edit</button>
+              <button class="btn btn-sm ${u.isActive?'btn-danger':''}"
+                onclick="toggleUser('${u.recordId}','${u.employeeId}','${u.isActive}','${u.fullName}')">
+                ${u.isActive?'🔒 Deactivate':'🔓 Activate'}
+              </button>
+            </td>
+          </tr>`).join('') : '<tr><td colspan="7" class="empty">No users found</td></tr>'}
         </tbody>
       </table>
+      </div>
     </div>`);
 }
+
+function editUser(recordId, fullName, role, dept, tlId) {
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999;display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:12px;padding:24px;width:100%;max-width:400px">
+      <h3 style="font-size:15px;font-weight:500;margin-bottom:4px">✏️ Edit User</h3>
+      <p style="font-size:13px;color:#888;margin-bottom:16px">${fullName}</p>
+      <div id="editUserErr" class="alert"></div>
+      <div class="form-group"><label>Role</label>
+        <select id="editRole" style="width:100%;height:40px;border:1px solid #ddd;border-radius:8px;padding:0 10px;font-size:13px">
+          <option ${role==='Admin'?'selected':''}>Admin</option>
+          <option ${role==='TL'?'selected':''}>TL</option>
+          <option ${role==='InventoryHolder'?'selected':''}>InventoryHolder</option>
+          <option ${role==='Employee'?'selected':''}>Employee</option>
+          <option ${role==='BenchmarkViewer'?'selected':''}>BenchmarkViewer</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Department</label>
+        <input id="editDept" value="${dept}" style="width:100%;height:40px;border:1px solid #ddd;border-radius:8px;padding:0 12px;font-size:13px">
+      </div>
+      <div class="form-group"><label>TL Employee ID</label>
+        <input id="editTL" value="${tlId}" style="width:100%;height:40px;border:1px solid #ddd;border-radius:8px;padding:0 12px;font-size:13px" placeholder="TL's Employee ID">
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+        <button class="btn btn-outline" onclick="this.closest('div[style]').remove()">Cancel</button>
+        <button class="btn" onclick="saveEditUser('${recordId}',this.closest('div[style]'))">Save Changes</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
+}
+
+async function saveEditUser(recordId, modal) {
+  const err = document.getElementById('editUserErr');
+  const role = document.getElementById('editRole').value;
+  const dept = document.getElementById('editDept').value.trim();
+  const tlId = document.getElementById('editTL').value.trim();
+  try {
+    const d = await req('PATCH', `/api/users/${recordId}/profile`, { role, department: dept, tlEmployeeId: tlId });
+    if (d.success) {
+      clearCache('/api/users');
+      modal.remove();
+      renderUsers();
+    } else showErr(err, d.message || 'Update failed');
+  } catch(e) { showErr(err, 'Update failed: ' + e.message); }
+}
+
+async function toggleUser(recordId, employeeId, isActive, fullName) {
+  const action = isActive === 'true' ? 'deactivate' : 'activate';
+  if (!confirm(`${action === 'deactivate' ? 'Deactivate' : 'Activate'} user ${fullName}?`)) return;
+  try {
+    const d = await req('PATCH', `/api/users/${recordId}/status`, { isActive: action === 'activate' });
+    if (d.success) { clearCache('/api/users'); renderUsers(); }
+    else alert(d.message || 'Failed');
+  } catch(e) { alert('Failed: ' + e.message); }
+}
+
 
 // ── Register New User ─────────────────────────────────────────────────────────
 function renderNewUser() {
@@ -815,42 +1013,69 @@ async function registerUser() {
     department: document.getElementById('uDept').value,
     tlEmployeeId: document.getElementById('uTL').value,
   });
-  if (d.success) { showOk(msg,`✅ ${name} registered successfully!`); setTimeout(()=>navigate('users'),2000); }
+  if (d.success) { clearCache('/api/users'); showOk(msg,`✅ ${name} registered successfully!`); setTimeout(()=>navigate('users'),2000); }
   else showErr(msg, d.message || 'Registration failed');
 }
 
 // ── Reports ───────────────────────────────────────────────────────────────────
 function renderReports() {
   const reports = [
-    { i:'📋', t:'Inventory Overview',     d:'All devices with status',     type:'inventory' },
-    { i:'👥', t:'Employee Allocation',    d:'Who has what device',          type:'employee_allocation' },
-    { i:'⚠️', t:'Overdue Devices',        d:'Devices past return date',     type:'overdue' },
-    { i:'🔴', t:'Duplicate Logs',         d:'Blocked duplicate IMEIs',      type:'duplicate_logs' },
-    { i:'🔧', t:'Damaged Devices',        d:'Damaged & scrapped inventory', type:'damaged' },
-    { i:'🔍', t:'Audit Log',              d:'Full activity history',         type:'audit_log' },
+    { i:'📋', t:'Inventory Overview',    d:'All devices with current status',   type:'inventory' },
+    { i:'👥', t:'Employee Allocation',   d:'Who has which device assigned',      type:'employee_allocation' },
+    { i:'⚠️', t:'Overdue Devices',       d:'Devices past their return date',     type:'overdue' },
+    { i:'🔴', t:'Duplicate Logs',        d:'Blocked duplicate IMEI entries',     type:'duplicate_logs' },
+    { i:'🔧', t:'Damaged Devices',       d:'Damaged & scrapped inventory',       type:'damaged' },
+    { i:'🔍', t:'Audit Log',             d:'Full activity history',               type:'audit_log' },
   ];
   show(`
     <div class="page-title">📁 Reports & Exports</div>
+    <p style="font-size:13px;color:#888;margin-bottom:16px">Click a button to download — file saves to your Downloads folder</p>
     <div class="report-grid">${reports.map(r=>`
       <div class="report-card">
         <div class="icon">${r.i}</div>
         <h3>${r.t}</h3>
         <p>${r.d}</p>
         <div class="report-btns">
-          <a href="${API}/api/reports/${r.type}?format=xlsx" target="_blank">
-            <button class="btn btn-sm btn-green">📥 Excel</button>
-          </a>
-          <a href="${API}/api/reports/${r.type}?format=csv" target="_blank">
-            <button class="btn btn-sm btn-outline" style="margin-left:4px">📄 CSV</button>
-          </a>
+          <button class="btn btn-sm btn-green" onclick="downloadReport('${r.type}','xlsx','${r.t}')">📥 Excel</button>
+          <button class="btn btn-sm btn-outline" style="margin-left:4px" onclick="downloadReport('${r.type}','csv','${r.t}')">📄 CSV</button>
         </div>
+        <div id="rep-${r.type}" style="font-size:11px;color:#888;margin-top:6px;min-height:14px"></div>
       </div>`).join('')}
     </div>`);
 }
 
+async function downloadReport(type, format, title) {
+  const statusEl = document.getElementById('rep-' + type);
+  if (statusEl) statusEl.textContent = '⏳ Generating...';
+  try {
+    const response = await fetch(`${API}/api/reports/${type}?format=${format}`, {
+      headers: { Authorization: `Bearer ${TOKEN}` }
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(()=>({}));
+      if (statusEl) statusEl.textContent = '❌ ' + (err.message || 'Failed');
+      return;
+    }
+    const blob = await response.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    const ts   = new Date().toISOString().slice(0,10);
+    a.href     = url;
+    a.download = `${title.replace(/\s+/g,'_')}_${ts}.${format}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    if (statusEl) { statusEl.textContent = '✅ Downloaded!'; setTimeout(()=>{ if(statusEl) statusEl.textContent=''; }, 3000); }
+  } catch(e) {
+    if (statusEl) statusEl.textContent = '❌ Error: ' + e.message;
+  }
+}
+
+
 // ── Audit Log ─────────────────────────────────────────────────────────────────
 async function renderAudit() {
-  show(`<div class="loading">Loading audit log...</div>`);
+  show(`<div class="table-wrap">${skelRows(6,7)}</div>`);
   const d = await req('GET', '/api/audit-log?pageSize=50');
   const items = d.items || [];
   show(`
@@ -901,7 +1126,7 @@ async function renderDupLog() {
 
 // ── Benchmark Inventory ──────────────────────────────────────────────────────
 async function renderBenchmark() {
-  show('<div class="loading">Loading benchmark inventory...</div>');
+  show(`<div class="table-wrap"><div class="table-header"><div class="table-title">🏆 Benchmark</div></div>${skelRows(5,10)}</div>`);
   try {
     const d = await req('GET', '/api/benchmark?pageSize=100');
     const items = d.items || [];
@@ -955,7 +1180,7 @@ function filterByCategory(tableId, s) {
 }
 
 async function renderBenchStats() {
-  show('<div class="loading">Loading benchmark stats...</div>');
+  show(skelStats(3));
   try {
     const d = await req('GET', '/api/benchmark/stats');
     const s = d.data || {};
@@ -1044,6 +1269,7 @@ function renderAddInventory() {
     <div class="page-title">➕ Add Single Device</div>
     <div class="form-card">
       <h3>Device Details</h3>
+      <p style="font-size:12px;color:#888;margin-bottom:14px">Fields marked * are mandatory</p>
       <div id="addInvMsg" class="alert"></div>
       <div class="form-row">
         <div class="form-group"><label>Brand *</label>
@@ -1061,70 +1287,89 @@ function renderAddInventory() {
             <option>PR0</option><option>PR0-1</option><option>PR1</option><option>PR1-1</option><option>PR2</option><option>PIR</option><option>MPR</option>
           </select>
         </div>
-        <div class="form-group"><label>HW Stage</label>
-          <select id="aiStage">
-            <option value="">Select stage</option>
-            <option>EVT</option><option>DVT</option><option>PVT</option><option>MP</option><option>Other</option>
-          </select>
+        <div class="form-group"><label>IMEI1 * (15 digits)</label>
+          <input id="aiImei1" placeholder="352000001234567" maxlength="15" oninput="validateImei(this,'aiImei1Err')">
+          <div id="aiImei1Err" style="font-size:11px;color:#c62828;margin-top:2px"></div>
         </div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label>IMEI1 * (15 digits)</label><input id="aiImei1" placeholder="352000001234567" maxlength="15"></div>
-        <div class="form-group"><label>IMEI2 (15 digits)</label><input id="aiImei2" placeholder="352000001234568" maxlength="15"></div>
+        <div class="form-group"><label>IMEI2 <span style="color:#888;font-size:11px">(optional, 15 digits)</span></label>
+          <input id="aiImei2" placeholder="352000001234568" maxlength="15" oninput="validateImei(this,'aiImei2Err')">
+          <div id="aiImei2Err" style="font-size:11px;color:#c62828;margin-top:2px"></div>
+        </div>
+        <div class="form-group"><label>Serial Number <span style="color:#888;font-size:11px">(optional)</span></label>
+          <input id="aiSerial" placeholder="Serial number"></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label>VC ID</label><input id="aiVcId" placeholder="VC ID"></div>
-        <div class="form-group"><label>Color *</label><input id="aiColor" placeholder="e.g. Black"></div>
+        <div class="form-group"><label>VC ID <span style="color:#888;font-size:11px">(optional)</span></label>
+          <input id="aiVcId" placeholder="VC ID"></div>
+        <div class="form-group"><label>Color <span style="color:#888;font-size:11px">(optional)</span></label>
+          <input id="aiColor" placeholder="e.g. Black"></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label>Storage / RAM *</label><input id="aiStorage" placeholder="e.g. 8GB/128GB"></div>
-        <div class="form-group"><label>Sample Received Date</label><input id="aiDate" type="date"></div>
+        <div class="form-group"><label>Storage / RAM <span style="color:#888;font-size:11px">(optional)</span></label>
+          <input id="aiStorage" placeholder="e.g. 8GB/128GB"></div>
+        <div class="form-group"><label>Assigned Date *</label>
+          <input id="aiAssignedDate" type="date"></div>
       </div>
       <div class="form-row">
         <div class="form-group"><label>Warehouse / Location *</label><input id="aiLoc" placeholder="e.g. WH-A"></div>
         <div class="form-group"><label>Inventory Holder *</label><input id="aiHolder" placeholder="Responsible person"></div>
       </div>
-      <div class="form-group"><label>Remarks</label><textarea id="aiRemarks" placeholder="Any notes..."></textarea></div>
+      <div class="form-group"><label>Remarks <span style="color:#888;font-size:11px">(optional)</span></label>
+        <textarea id="aiRemarks" placeholder="Any notes..."></textarea></div>
       <button class="btn" onclick="saveNewInventory()">Save Device</button>
     </div>`);
 }
 
+function validateImei(input, errId) {
+  const v = input.value.trim();
+  const el = document.getElementById(errId);
+  if (!el) return;
+  if (v && !/^\d+$/.test(v)) { el.textContent = 'IMEI must contain only digits'; input.style.borderColor='#c62828'; }
+  else if (v && v.length !== 15) { el.textContent = `${v.length}/15 digits`; input.style.borderColor='#b45309'; }
+  else { el.textContent = ''; input.style.borderColor = v ? '#137333' : ''; }
+}
+
 async function saveNewInventory() {
-  const msg   = document.getElementById('addInvMsg');
-  const brand = document.getElementById('aiBrand').value;
-  const model = document.getElementById('aiModel').value.trim();
-  const hwType= document.getElementById('aiHwType').value;
-  const imei1 = document.getElementById('aiImei1').value.trim();
-  const color = document.getElementById('aiColor').value.trim();
-  const storage=document.getElementById('aiStorage').value.trim();
-  const loc   = document.getElementById('aiLoc').value.trim();
-  const holder= document.getElementById('aiHolder').value.trim();
+  const msg    = document.getElementById('addInvMsg');
+  const brand  = document.getElementById('aiBrand').value;
+  const model  = document.getElementById('aiModel').value.trim();
+  const hwType = document.getElementById('aiHwType').value;
+  const imei1  = document.getElementById('aiImei1').value.trim();
+  const loc    = document.getElementById('aiLoc').value.trim();
+  const holder = document.getElementById('aiHolder').value.trim();
+  const assignedDate = document.getElementById('aiAssignedDate').value;
 
-  if (!brand||!model||!hwType||!color||!storage||!loc||!holder) {
-    showErr(msg,'Please fill all mandatory fields (*)'); return;
+  if (!brand||!model||!hwType||!imei1||!loc||!holder||!assignedDate) {
+    showErr(msg,'Please fill all mandatory fields (Brand, Model, HW Type, IMEI1, Location, Holder, Assigned Date)'); return;
   }
-  if (imei1 && imei1.length !== 15) { showErr(msg,'IMEI1 must be exactly 15 digits'); return; }
+  if (imei1.length !== 15) { showErr(msg,'IMEI1 must be exactly 15 digits'); return; }
   const imei2 = document.getElementById('aiImei2').value.trim();
-  if (imei2 && imei2.length !== 15) { showErr(msg,'IMEI2 must be exactly 15 digits'); return; }
+  if (imei2 && imei2.length !== 15) { showErr(msg,'IMEI2 must be exactly 15 digits if provided'); return; }
 
-  const dateVal = document.getElementById('aiDate').value;
+  const btn = document.querySelector('#addInvMsg ~ button') || document.querySelector('.form-card .btn');
+  const saveBtn = document.querySelector('[onclick="saveNewInventory()"]');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving...'; }
+
   const d = await req('POST', '/api/inventory', {
     brand, deviceModel: model, sampleHwType: hwType,
-    hwStage: document.getElementById('aiStage').value,
-    imei1, imei2,
-    vcId: document.getElementById('aiVcId').value.trim(),
-    color, storageRamVariant: storage,
-    sampleReceivedDate: dateVal ? new Date(dateVal).getTime() : null,
+    imei1, imei2: imei2 || '',
+    serialNumber: document.getElementById('aiSerial').value.trim(),
+    vcId:   document.getElementById('aiVcId').value.trim(),
+    color:  document.getElementById('aiColor').value.trim(),
+    storageRamVariant: document.getElementById('aiStorage').value.trim(),
+    assignedDate: new Date(assignedDate).getTime(),
     warehouseLocation: loc, inventoryHolder: holder,
     remarks: document.getElementById('aiRemarks').value,
   });
+
+  if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Device'; }
+
   if (d.success) {
-    showOk(msg,'✅ Device added! You can now upload a photo for it.');
-    // Reset form
-    ['aiBrand','aiHwType','aiStage'].forEach(id => document.getElementById(id).value = '');
-    ['aiModel','aiImei1','aiImei2','aiVcId','aiColor','aiStorage','aiDate','aiLoc','aiHolder','aiRemarks']
-      .forEach(id => document.getElementById(id).value = '');
-    setTimeout(() => navigate('inventory'), 2500);
+    showOk(msg,'✅ Device added successfully!');
+    clearCache('/api/inventory'); clearCache('/api/inventory/dashboard');
+    setTimeout(() => navigate('inventory'), 2000);
   } else showErr(msg, d.message || 'Failed to add device');
 }
 
