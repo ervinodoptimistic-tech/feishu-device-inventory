@@ -24,7 +24,38 @@ const validate = rules => [...rules, (req, res, next) => {
 }];
 
 // ── DEBUG: see raw Bitable fields (Admin only, remove after testing) ──────────
-router.get('/debug/inventory-raw', async (req, res, next) => {
+// DELETE /api/debug/cleanup-empty  — delete records with no Brand/IMEI (Admin only)
+router.delete('/debug/cleanup-empty', authenticate, adminOnly, async (req, res, next) => {
+  try {
+    const { listAll } = require('../utils/bitable');
+    const client = require('../config/feishu');
+    const { APP_TOKEN } = require('../config/constants');
+
+    const all = await listAll(TABLES.INVENTORY());
+    const emptyRecords = all.filter(r => {
+      const f = r.fields || {};
+      // Empty if Brand AND IMEI1 AND Device Model are all missing
+      return !f['Brand'] && !f['IMEI1'] && !f['Device Model'];
+    });
+
+    const ids = emptyRecords.map(r => r.record_id);
+    let deleted = 0;
+
+    // Delete in batches of 500
+    for (let i = 0; i < ids.length; i += 500) {
+      const chunk = ids.slice(i, i + 500);
+      await client.bitable.appTableRecord.batchDelete({
+        path: { app_token: APP_TOKEN(), table_id: TABLES.INVENTORY() },
+        data: { records: chunk },
+      });
+      deleted += chunk.length;
+    }
+
+    res.json({ success: true, deleted, message: `Deleted ${deleted} empty records. Re-upload your Excel file now.` });
+  } catch (err) { next(err); }
+});
+
+router.get('/debug/inventory-raw', authenticate, adminOnly, async (req, res, next) => {
   try {
     const { listPage, createOne, getOne } = require('../utils/bitable');
     
