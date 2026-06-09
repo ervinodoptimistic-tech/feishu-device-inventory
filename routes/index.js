@@ -59,6 +59,48 @@ router.delete('/debug/cleanup-empty', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /debug/test-batch - test batchCreate with 2 records
+router.get('/debug/test-batch', async (req, res, next) => {
+  try {
+    const client = require('../config/feishu');
+    const { APP_TOKEN } = require('../config/constants');
+    
+    const testRecords = [
+      { 'Brand': 'itel',  'Device Model': 'BATCH-TEST-1', 'IMEI1': '111222333444551',
+        'Warehouse / Location': 'WH-TEST', 'Inventory Holder': 'TEST',
+        'Upload Batch ID': 'BATCH-DEBUG', 'Device Status': 'New',
+        'Assigned Date': Date.now() },
+      { 'Brand': 'Tecno', 'Device Model': 'BATCH-TEST-2', 'IMEI1': '111222333444552',
+        'Warehouse / Location': 'WH-TEST', 'Inventory Holder': 'TEST',
+        'Upload Batch ID': 'BATCH-DEBUG', 'Device Status': 'New',
+        'Assigned Date': Date.now() },
+    ];
+
+    let rawResponse = null;
+    let batchError = null;
+    try {
+      rawResponse = await client.bitable.appTableRecord.batchCreate({
+        path: { app_token: APP_TOKEN(), table_id: TABLES.INVENTORY() },
+        data: { records: testRecords.map(f => ({ fields: f })) },
+      });
+    } catch(e) {
+      batchError = e.message;
+    }
+
+    res.json({
+      success: true,
+      batchError,
+      rawResponse: rawResponse ? {
+        code: rawResponse.code,
+        msg:  rawResponse.msg,
+        dataKeys: Object.keys(rawResponse.data || {}),
+        recordsCount: rawResponse.data?.records?.length,
+        firstRecord: rawResponse.data?.records?.[0],
+      } : null,
+    });
+  } catch(err) { next(err); }
+});
+
 // GET /debug/test-insert - test inserting one record and show full error
 router.get('/debug/test-insert', async (req, res, next) => {
   try {
