@@ -303,12 +303,34 @@ async function bulkUpload(fileBuffer, actorUser, adminEmail, progressCb) {
   const CHUNK = 500;
   for (let i = 0; i < toInsert.length; i += CHUNK) {
     const chunk = toInsert.slice(i, i + CHUNK);
-    progressCb?.(`Inserting ${i + 1}–${Math.min(i + CHUNK, toInsert.length)} of ${toInsert.length}...`);
-    const result = await batchCreate(TABLES.INVENTORY(), chunk.map(toFields));
-    summary.success += result.length;
+    const chunkEnd = Math.min(i + CHUNK, toInsert.length);
+    progressCb?.(`Inserting records ${i + 1}–${chunkEnd} of ${toInsert.length}...`);
+    try {
+      const result = await batchCreate(TABLES.INVENTORY(), chunk.map(toFields));
+      summary.success += result.length;
+      // If batchCreate returned fewer records than sent, some failed silently
+      if (result.length < chunk.length) {
+        const missed = chunk.length - result.length;
+        summary.failed += missed;
+        summary.errors.push({
+          row: `rows ${i + 2}–${chunkEnd + 1}`,
+          reason: `Batch insert: ${result.length}/${chunk.length} succeeded. ${missed} records may have duplicate IMEI or invalid fields.`
+        });
+      }
+    } catch (batchErr) {
+      // batchCreate threw — add ALL rows in this chunk as failed with the real error
+      summary.failed += chunk.length;
+      const errMsg = batchErr.message || String(batchErr);
+      summary.errors.push({
+        row: `rows ${i + 2}–${chunkEnd + 1}`,
+        reason: `Batch insert error: ${errMsg}`
+      });
+      progressCb?.(`❌ Batch error: ${errMsg}`);
+      console.error('[bulkUpload] batchCreate error:', errMsg);
+    }
   }
 
-  summary.failed += (toInsert.length - summary.success);
+  // All failures tracked inside the batch loop above
 
   await audit.log({
     ...actorUser, action: AUDIT_ACTIONS.UPLOAD,
