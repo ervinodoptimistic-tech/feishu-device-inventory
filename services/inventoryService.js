@@ -1,5 +1,6 @@
-// services/inventoryService.js — v3
-// Optimized bulk upload: parallel duplicate check + batch insert in chunks
+// services/inventoryService.js — v4
+// FUZZY COLUMN MATCHING: accepts slight header variations in uploaded Excel files
+// e.g. "Sample/HW Type", "HW Type", "IMEI 1", "Assigned date" all work
 
 const { v4: uuid }  = require('uuid');
 const XLSX          = require('xlsx');
@@ -10,7 +11,61 @@ const { TABLES, DEVICE_STATUS, AUDIT_ACTIONS }
 const audit         = require('./auditService');
 const notif         = require('./notificationService');
 
-// ── Field mapper ──────────────────────────────────────────────────────────────
+// ── Fuzzy column resolver ─────────────────────────────────────────────────────
+// Maps many possible header variations to canonical field names
+const COLUMN_ALIASES = {
+  'Brand':                   ['brand'],
+  'Device Model':            ['device model', 'model', 'devicemodel'],
+  'Sample / HW Type':        ['sample / hw type', 'sample/hw type', 'hw type', 'hwtype',
+                               'sample hw type', 'nple / hw typ', 'sample/hwtype', 'type'],
+  'IMEI1':                   ['imei1', 'imei 1', 'imei-1', 'imei_1', 'primary imei', 'imei'],
+  'IMEI2':                   ['imei2', 'imei 2', 'imei-2', 'imei_2', 'secondary imei'],
+  'Serial Number':           ['serial number', 'serial no', 'serial', 'serialnumber', 's/n', 'sn'],
+  'VC ID':                   ['vc id', 'vcid', 'vc_id', 'verification id', 'vc'],
+  'Color':                   ['color', 'colour'],
+  'Storage / RAM Variant':   ['storage / ram variant', 'storage/ram variant', 'storage / ram',
+                               'storage/ram', 'ram/storage', 'variant', 'storage', 'ram',
+                               'storage / ram varian', 'storage/ram varian'],
+  'Assigned Date':           ['assigned date', 'assigneddate', 'assigned_date', 'date assigned',
+                               'assignment date'],
+  'Sample Received Date':    ['sample received date', 'received date', 'receiveddate',
+                               'date received', 'receipt date'],
+  'Warehouse / Location':    ['warehouse / location', 'warehouse/location', 'location',
+                               'warehouse', 'storage location'],
+  'Inventory Holder':        ['inventory holder', 'inventoryholder', 'holder', 'custodian',
+                               'in-charge', 'incharge'],
+  'Assigned To':             ['assigned to', 'assignedto', 'assigned_to', 'employee'],
+  'Remarks':                 ['remarks', 'notes', 'comment', 'comments', 'note'],
+};
+
+/**
+ * Build a lookup map: normalised_header_string → canonical_field_name
+ * Called once per upload to map actual Excel headers to our canonical names.
+ */
+function buildColumnMap(excelHeaders) {
+  const map = {}; // canonical → actual excel header
+  const normalise = s => String(s || '').toLowerCase().trim().replace(/\s+/g, ' ');
+
+  for (const [canonical, aliases] of Object.entries(COLUMN_ALIASES)) {
+    for (const header of excelHeaders) {
+      const norm = normalise(header);
+      if (norm === normalise(canonical) || aliases.includes(norm)) {
+        map[canonical] = header; // use actual Excel header for row access
+        break;
+      }
+    }
+  }
+  return map;
+}
+
+/** Get cell value using canonical field name via the column map */
+function col(row, canonical, colMap) {
+  const actualHeader = colMap[canonical];
+  if (!actualHeader) return '';
+  return String(row[actualHeader] ?? '').trim();
+}
+
+// ── Field mapper (Bitable record → JS object) ─────────────────────────────────
 function toDevice(record) {
   const f = record.fields || {};
   return {
@@ -27,7 +82,7 @@ function toDevice(record) {
     sampleReceivedDate: f['Sample Received Date']          || null,
     warehouseLocation:  fieldText(f['Warehouse / Location']) || '',
     inventoryHolder:    fieldText(f['Inventory Holder'])   || '',
-    deviceStatus:       selectText(f['Device Status'])     || '',
+    deviceStatus:       selectText(f['Device Status'])     || fieldText(f['Device Status'])   || '',
     assignedTo:         fieldText(f['Assigned To'])        || '',
     employeeId:         fieldText(f['Employee ID'])        || '',
     assignedDate:       f['Assigned Date']                 || null,
@@ -37,7 +92,6 @@ function toDevice(record) {
     uploadBatchId:      fieldText(f['Upload Batch ID'])    || '',
     remarks:            fieldText(f['Remarks'])            || '',
     createdAt:          f['Created At']                    || null,
-    lastModifiedAt:     f['Last Modified At']              || null,
   };
 }
 
@@ -46,46 +100,54 @@ function toFields(data) {
   if (data.brand             !== undefined) f['Brand']                = data.brand;
   if (data.deviceModel       !== undefined) f['Device Model']         = data.deviceModel;
   if (data.sampleHwType      !== undefined) f['Sample / HW Type']    = data.sampleHwType;
-  if (data.imei1             !== undefined) f['IMEI1']                = data.imei1;
-  if (data.imei2             !== undefined) f['IMEI2']                = data.imei2;
-  if (data.vcId              !== undefined) f['VC ID']                = data.vcId;
-  if (data.serialNumber      !== undefined) f['Serial Number']        = data.serialNumber;
+  if (data.imei1             !== undefined) f['IMEI1']                = String(data.imei1);
+  if (data.imei2             !== undefined) f['IMEI2']                = String(data.imei2);
+  if (data.vcId              !== undefined) f['VC ID']                = String(data.vcId);
+  if (data.serialNumber      !== undefined) f['Serial Number']        = String(data.serialNumber);
   if (data.color             !== undefined) f['Color']                = data.color;
   if (data.storageRamVariant !== undefined) f['Storage / RAM Variant']= data.storageRamVariant;
   if (data.warehouseLocation !== undefined) f['Warehouse / Location'] = data.warehouseLocation;
   if (data.inventoryHolder   !== undefined) f['Inventory Holder']     = data.inventoryHolder;
-  if (data.remarks           !== undefined) f['Remarks']              = data.remarks;
-  if (data.uploadBatchId     !== undefined) f['Upload Batch ID']      = data.uploadBatchId;
   if (data.assignedTo        !== undefined) f['Assigned To']          = data.assignedTo;
   if (data.employeeId        !== undefined) f['Employee ID']          = data.employeeId;
+  if (data.remarks           !== undefined) f['Remarks']              = data.remarks;
+  if (data.uploadBatchId     !== undefined) f['Upload Batch ID']      = data.uploadBatchId;
   if (data.conditionOnReturn !== undefined) f['Condition on Return']  = data.conditionOnReturn;
   if (data.deviceStatus      !== undefined) f['Device Status']        = { text: data.deviceStatus, type: 'text' };
-  if (data.sampleReceivedDate!== undefined) f['Sample Received Date'] = data.sampleReceivedDate;
-  if (data.assignedDate      !== undefined) f['Assigned Date']        = data.assignedDate;
-  if (data.expectedReturnDate!== undefined) f['Expected Return Date'] = data.expectedReturnDate;
-  if (data.actualReturnDate  !== undefined) f['Actual Return Date']   = data.actualReturnDate;
+  if (data.sampleReceivedDate!== undefined && data.sampleReceivedDate) f['Sample Received Date'] = data.sampleReceivedDate;
+  if (data.assignedDate      !== undefined && data.assignedDate)       f['Assigned Date']        = data.assignedDate;
+  if (data.expectedReturnDate!== undefined && data.expectedReturnDate) f['Expected Return Date'] = data.expectedReturnDate;
+  if (data.actualReturnDate  !== undefined && data.actualReturnDate)   f['Actual Return Date']   = data.actualReturnDate;
   return f;
 }
 
-// ── MANDATORY FIELDS ──────────────────────────────────────────────────────────
-const REQUIRED_COLS = [
-  'Brand', 'Device Model', 'Sample / HW Type', 'IMEI1',
-  'Warehouse / Location', 'Inventory Holder', 'Assigned Date'
-];
+// ── Parse date string → timestamp ────────────────────────────────────────────
+function parseDate(val) {
+  if (!val) return null;
+  const s = String(val).trim();
+  if (!s) return null;
+  // Handle Excel serial number dates
+  if (/^\d{5}$/.test(s)) {
+    const d = XLSX.SSF.parse_date_code(Number(s));
+    if (d) return new Date(d.y, d.m - 1, d.d).getTime();
+  }
+  const d = new Date(s);
+  return isNaN(d) ? null : d.getTime();
+}
 
-// ── OPTIMIZED BULK DUPLICATE CHECK ───────────────────────────────────────────
-// Fetch ALL existing IMEI1, IMEI2, VC ID values in ONE API call
-// then do in-memory lookup — much faster than one-by-one queries
+// ── Mandatory fields ──────────────────────────────────────────────────────────
+const MANDATORY = ['Brand', 'Device Model', 'Sample / HW Type', 'IMEI1',
+                   'Warehouse / Location', 'Inventory Holder', 'Assigned Date'];
+
+// ── Build existing DB index for fast duplicate checking ───────────────────────
 async function buildExistingIndex() {
   const all = await listAll(TABLES.INVENTORY());
-  const imei1Set = new Set();
-  const imei2Set = new Set();
-  const vcIdSet  = new Set();
+  const imei1Set = new Set(), imei2Set = new Set(), vcIdSet = new Set();
   for (const r of all) {
     const f = r.fields || {};
-    const i1 = fieldText(f['IMEI1']).trim();
-    const i2 = fieldText(f['IMEI2']).trim();
-    const vc = fieldText(f['VC ID']).trim();
+    const i1 = String(fieldText(f['IMEI1']) || '').trim();
+    const i2 = String(fieldText(f['IMEI2']) || '').trim();
+    const vc = String(fieldText(f['VC ID'])  || '').trim();
     if (i1) imei1Set.add(i1);
     if (i2) imei2Set.add(i2);
     if (vc) vcIdSet.add(vc);
@@ -93,178 +155,172 @@ async function buildExistingIndex() {
   return { imei1Set, imei2Set, vcIdSet };
 }
 
-// ── BULK UPLOAD — optimized for 3000+ rows ───────────────────────────────────
+// ── BULK UPLOAD ───────────────────────────────────────────────────────────────
 async function bulkUpload(fileBuffer, actorUser, adminEmail, progressCb) {
-  const batchId  = `BATCH-${Date.now()}-${uuid().slice(0,6).toUpperCase()}`;
+  const batchId  = `BATCH-${Date.now()}-${uuid().slice(0, 6).toUpperCase()}`;
   const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
-  const sheetName= workbook.SheetNames.includes('Inventory Upload')
+
+  // Prefer "Inventory Upload" sheet, else first sheet
+  const sheetName = workbook.SheetNames.includes('Inventory Upload')
     ? 'Inventory Upload' : workbook.SheetNames[0];
-  const sheet    = workbook.Sheets[sheetName];
-  const rows     = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+  const sheet = workbook.Sheets[sheetName];
 
-  const summary = {
-    batchId, total: rows.length,
-    success: 0, failed: 0, duplicates: 0, missingData: 0,
-    errors: []
-  };
+  // Read with header row = 1, defval = '' so empty cells don't disappear
+  const rows = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
 
-  if (rows.length === 0) return summary;
+  const summary = { batchId, total: rows.length, success: 0, failed: 0,
+                    duplicates: 0, missingData: 0, errors: [] };
 
-  // Step 1: Validate all rows first (fast, in-memory)
-  progressCb?.('Validating rows...');
+  if (rows.length === 0) {
+    summary.errors.push({ row: 1, reason: 'File appears empty or headers not found. Please use the official template.' });
+    return summary;
+  }
+
+  // Build column map from actual headers
+  const excelHeaders = Object.keys(rows[0]);
+  const colMap = buildColumnMap(excelHeaders);
+
+  // Log which columns were detected
+  progressCb?.(`Detected ${excelHeaders.length} columns. Mapping: ${Object.keys(colMap).join(', ')}`);
+
+  // Warn if mandatory columns are missing
+  const missingCols = MANDATORY.filter(m => !colMap[m]);
+  if (missingCols.length > 0) {
+    summary.errors.push({
+      row: 1,
+      reason: `Cannot find these required columns: ${missingCols.join(', ')}. ` +
+              `Please use the official template. Found headers: ${excelHeaders.join(', ')}`
+    });
+    summary.failed = rows.length;
+    return summary;
+  }
+
+  // ── Step 1: Validate all rows in memory ──────────────────────────────────
+  progressCb?.(`Validating ${rows.length} rows...`);
   const validRows = [];
-  const batchImei1 = new Set();
-  const batchImei2 = new Set();
-  const batchVcId  = new Set();
+  const batchImei1 = new Set(), batchImei2 = new Set(), batchVcId = new Set();
 
   for (let i = 0; i < rows.length; i++) {
     const row    = rows[i];
     const rowNum = i + 2;
 
     // Check mandatory fields
-    const missing = REQUIRED_COLS.filter(c => !String(row[c] || '').trim());
+    const missing = MANDATORY.filter(m => !col(row, m, colMap));
     if (missing.length) {
       summary.missingData++;
       summary.failed++;
-      summary.errors.push({ row: rowNum, reason: `Missing: ${missing.join(', ')}` });
+      summary.errors.push({ row: rowNum, reason: `Missing required: ${missing.join(', ')}` });
       continue;
     }
 
-    const imei1 = String(row['IMEI1'] || '').trim();
-    const imei2 = String(row['IMEI2'] || '').trim();
-    const vcId  = String(row['VC ID']  || '').trim();
+    const imei1 = col(row, 'IMEI1', colMap).replace(/\s/g, '');
+    const imei2 = col(row, 'IMEI2', colMap).replace(/\s/g, '');
+    const vcId  = col(row, 'VC ID',  colMap);
 
-    // IMEI length validation
-    if (imei1 && imei1.length !== 15) {
+    // IMEI validation — only digits, exactly 15
+    if (!/^\d{15}$/.test(imei1)) {
       summary.failed++;
-      summary.errors.push({ row: rowNum, reason: `IMEI1 must be 15 digits, got ${imei1.length}` });
+      summary.errors.push({ row: rowNum, reason: `IMEI1 "${imei1}" must be exactly 15 digits (found ${imei1.length})` });
       continue;
     }
-    if (imei2 && imei2.length !== 15) {
+    if (imei2 && !/^\d{15}$/.test(imei2)) {
       summary.failed++;
-      summary.errors.push({ row: rowNum, reason: `IMEI2 must be 15 digits, got ${imei2.length}` });
+      summary.errors.push({ row: rowNum, reason: `IMEI2 "${imei2}" must be exactly 15 digits if provided` });
       continue;
     }
 
-    // Check within-batch duplicates
-    const batchDup = [];
-    if (imei1 && batchImei1.has(imei1)) batchDup.push(`IMEI1=${imei1} (duplicate within file)`);
-    if (imei2 && batchImei2.has(imei2)) batchDup.push(`IMEI2=${imei2} (duplicate within file)`);
-    if (vcId  && batchVcId.has(vcId))   batchDup.push(`VC ID=${vcId} (duplicate within file)`);
-
-    if (batchDup.length) {
-      summary.duplicates++;
-      summary.failed++;
-      summary.errors.push({ row: rowNum, reason: batchDup.join(', ') });
+    // Within-batch duplicates
+    const batchDups = [];
+    if (batchImei1.has(imei1)) batchDups.push(`IMEI1 ${imei1} (duplicate within this file)`);
+    if (imei2 && batchImei2.has(imei2)) batchDups.push(`IMEI2 ${imei2} (duplicate within this file)`);
+    if (vcId  && batchVcId.has(vcId))   batchDups.push(`VC ID ${vcId} (duplicate within this file)`);
+    if (batchDups.length) {
+      summary.duplicates++; summary.failed++;
+      summary.errors.push({ row: rowNum, reason: batchDups.join('; ') });
       continue;
     }
-
-    if (imei1) batchImei1.add(imei1);
+    batchImei1.add(imei1);
     if (imei2) batchImei2.add(imei2);
     if (vcId)  batchVcId.add(vcId);
 
-    // Parse assigned date
-    const assignedDateRaw = String(row['Assigned Date'] || '').trim();
-    let assignedDate = null;
-    if (assignedDateRaw) {
-      const d = new Date(assignedDateRaw);
-      if (!isNaN(d)) assignedDate = d.getTime();
-    }
-
-    validRows.push({ rowNum, imei1, imei2, vcId, assignedDate, raw: row });
+    validRows.push({ rowNum, imei1, imei2, vcId, row });
   }
 
-  // Step 2: ONE bulk fetch to get all existing records (instead of N queries)
+  // ── Step 2: ONE DB read for all existing duplicates ───────────────────────
   progressCb?.(`Checking ${validRows.length} valid rows against database...`);
   const { imei1Set, imei2Set, vcIdSet } = await buildExistingIndex();
 
-  // Step 3: Filter out DB duplicates
+  // ── Step 3: Build insert list ─────────────────────────────────────────────
   const toInsert = [];
-  const dupAlerts = [];
-
-  for (const { rowNum, imei1, imei2, vcId, assignedDate, raw } of validRows) {
+  for (const { rowNum, imei1, imei2, vcId, row } of validRows) {
     const dbDups = [];
-    if (imei1 && imei1Set.has(imei1)) dbDups.push(`IMEI1=${imei1}`);
-    if (imei2 && imei2Set.has(imei2)) dbDups.push(`IMEI2=${imei2}`);
-    if (vcId  && vcIdSet.has(vcId))   dbDups.push(`VC ID=${vcId}`);
-
+    if (imei1Set.has(imei1)) dbDups.push(`IMEI1 ${imei1} already in database`);
+    if (imei2 && imei2Set.has(imei2)) dbDups.push(`IMEI2 ${imei2} already in database`);
+    if (vcId  && vcIdSet.has(vcId))   dbDups.push(`VC ID ${vcId} already in database`);
     if (dbDups.length) {
-      summary.duplicates++;
-      summary.failed++;
-      summary.errors.push({ row: rowNum, reason: `Duplicate in DB: ${dbDups.join(', ')}` });
-      dupAlerts.push({ field: dbDups[0].split('=')[0], value: dbDups[0].split('=')[1], row: rowNum });
+      summary.duplicates++; summary.failed++;
+      summary.errors.push({ row: rowNum, reason: dbDups.join('; ') });
       await audit.logDuplicate({
         batchId,
-        fieldName: dbDups.map(d=>d.split('=')[0]).join(','),
-        value:     dbDups.map(d=>d.split('=')[1]).join(','),
-        rowData:   JSON.stringify(raw).slice(0, 500),
+        fieldName: dbDups.map(d => d.split(' ')[0] + ' ' + d.split(' ')[1]).join(','),
+        value:     dbDups.map(d => d.split(' ')[2]).join(','),
+        rowData:   JSON.stringify(row).slice(0, 500),
         blockedBy: actorUser?.employeeId,
       });
       continue;
     }
 
-    const assignedTo = String(raw['Assigned To'] || '').trim();
+    const assignedTo = col(row, 'Assigned To', colMap);
     toInsert.push({
-      brand:             String(raw['Brand']).trim(),
-      deviceModel:       String(raw['Device Model']).trim(),
-      sampleHwType:      String(raw['Sample / HW Type']).trim(),
+      brand:             col(row, 'Brand',                 colMap),
+      deviceModel:       col(row, 'Device Model',          colMap),
+      sampleHwType:      col(row, 'Sample / HW Type',      colMap),
       imei1,
       imei2:             imei2 || '',
       vcId:              vcId  || '',
-      serialNumber:      String(raw['Serial Number'] || '').trim(),
-      color:             String(raw['Color'] || '').trim(),
-      storageRamVariant: String(raw['Storage / RAM Variant'] || '').trim(),
-      warehouseLocation: String(raw['Warehouse / Location']).trim(),
-      inventoryHolder:   String(raw['Inventory Holder']).trim(),
+      serialNumber:      col(row, 'Serial Number',         colMap),
+      color:             col(row, 'Color',                 colMap),
+      storageRamVariant: col(row, 'Storage / RAM Variant', colMap),
+      warehouseLocation: col(row, 'Warehouse / Location',  colMap),
+      inventoryHolder:   col(row, 'Inventory Holder',      colMap),
       assignedTo,
-      assignedDate,
-      remarks:           String(raw['Remarks'] || '').trim(),
+      assignedDate:      parseDate(col(row, 'Assigned Date',          colMap)),
+      sampleReceivedDate:parseDate(col(row, 'Sample Received Date',   colMap)),
+      remarks:           col(row, 'Remarks', colMap),
       deviceStatus:      assignedTo ? DEVICE_STATUS.ASSIGNED : DEVICE_STATUS.NEW,
       uploadBatchId:     batchId,
     });
   }
 
-  // Step 4: Insert in chunks of 500 (Feishu limit) with progress
+  // ── Step 4: Batch insert 500 at a time ────────────────────────────────────
   const CHUNK = 500;
-  let inserted = 0;
   for (let i = 0; i < toInsert.length; i += CHUNK) {
     const chunk = toInsert.slice(i, i + CHUNK);
-    progressCb?.(`Inserting records ${i + 1}–${Math.min(i + CHUNK, toInsert.length)} of ${toInsert.length}...`);
+    progressCb?.(`Inserting ${i + 1}–${Math.min(i + CHUNK, toInsert.length)} of ${toInsert.length}...`);
     const result = await batchCreate(TABLES.INVENTORY(), chunk.map(toFields));
-    inserted += result.length;
+    summary.success += result.length;
   }
 
-  summary.success = inserted;
-  summary.failed  = rows.length - inserted;
+  summary.failed += (toInsert.length - summary.success);
 
-  // Audit + notify
   await audit.log({
-    ...actorUser,
-    action: AUDIT_ACTIONS.UPLOAD,
-    entityType: 'Inventory',
-    entityId: batchId,
-    newValue: { total: rows.length, inserted, duplicates: summary.duplicates }
+    ...actorUser, action: AUDIT_ACTIONS.UPLOAD,
+    entityType: 'Inventory', entityId: batchId,
+    newValue: { total: rows.length, inserted: summary.success, duplicates: summary.duplicates },
   });
-
-  if (dupAlerts.length && adminEmail) {
-    await notif.notifyDuplicateUpload({
-      adminEmail, adminId: actorUser?.employeeId, batchId, duplicates: dupAlerts
-    });
-  }
 
   return summary;
 }
 
-// ── Single device create ──────────────────────────────────────────────────────
+// ── Single device ─────────────────────────────────────────────────────────────
 async function createDevice(data, actorUser) {
-  // Quick duplicate check for single entry
   const existing = await listAll(TABLES.INVENTORY());
   const dups = [];
   for (const r of existing) {
     const f = r.fields || {};
-    if (data.imei1 && fieldText(f['IMEI1']) === data.imei1) dups.push({ field: 'IMEI1', value: data.imei1 });
-    if (data.imei2 && fieldText(f['IMEI2']) === data.imei2) dups.push({ field: 'IMEI2', value: data.imei2 });
-    if (data.vcId  && fieldText(f['VC ID'])  === data.vcId)  dups.push({ field: 'VC ID',  value: data.vcId  });
+    if (data.imei1 && fieldText(f['IMEI1']) === String(data.imei1)) dups.push({ field: 'IMEI1', value: data.imei1 });
+    if (data.imei2 && fieldText(f['IMEI2']) === String(data.imei2)) dups.push({ field: 'IMEI2', value: data.imei2 });
+    if (data.vcId  && fieldText(f['VC ID'])  === String(data.vcId))  dups.push({ field: 'VC ID',  value: data.vcId });
     if (dups.length) break;
   }
   if (dups.length) {
@@ -301,10 +357,10 @@ async function updateDevice(recordId, data, actorUser) {
 }
 
 async function getDashboardStats() {
-  const all = await listAll(TABLES.INVENTORY());
+  const all     = await listAll(TABLES.INVENTORY());
   const devices = all.map(toDevice);
   const byStatus = {};
-  for (const s of ['New','Available','Assigned','Returned','Damaged','Scrapped']) byStatus[s] = 0;
+  for (const s of ['New', 'Available', 'Assigned', 'Returned', 'Damaged', 'Scrapped']) byStatus[s] = 0;
   devices.forEach(d => { if (byStatus[d.deviceStatus] !== undefined) byStatus[d.deviceStatus]++; });
   const byBrand = {};
   devices.forEach(d => { byBrand[d.brand] = (byBrand[d.brand] || 0) + 1; });
