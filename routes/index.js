@@ -59,6 +59,53 @@ router.delete('/debug/cleanup-empty', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /debug/test-insert - test inserting one record and show full error
+router.get('/debug/test-insert', async (req, res, next) => {
+  try {
+    const { createOne, listPage } = require('../utils/bitable');
+    
+    // Try inserting one real record
+    let insertResult = null;
+    let insertError = null;
+    try {
+      const record = await createOne(TABLES.INVENTORY(), {
+        'Brand':                'itel',
+        'Device Model':         'A671N',
+        'Sample / HW Type':     'PR0',
+        'IMEI1':                '911589200003028',
+        'Warehouse / Location': 'Inventory',
+        'Inventory Holder':     'Shane Alam',
+        'Assigned Date':        new Date('2025-12-02').getTime(),
+        'Upload Batch ID':      'TEST-REAL-' + Date.now(),
+        'Device Status':        'New',
+        'Color':                'Blue',
+        'Storage / RAM Variant':'8GB',
+      });
+      insertResult = record;
+    } catch(e) {
+      insertError = { message: e.message, stack: e.stack?.split('\n').slice(0,3).join(' | ') };
+    }
+
+    // Also check current inventory count
+    const inv = await listPage(TABLES.INVENTORY(), { pageSize: 5 });
+    
+    res.json({
+      success: true,
+      tableId: TABLES.INVENTORY(),
+      currentRecordCount: inv.total,
+      currentRecords: inv.items.slice(0,3).map(r => ({
+        id: r.record_id,
+        fields: Object.keys(r.fields || {})
+      })),
+      insertTest: insertResult ? { 
+        success: true, 
+        recordId: insertResult.record_id,
+        savedFields: Object.keys(insertResult.fields || {})
+      } : { success: false, error: insertError }
+    });
+  } catch(err) { next(err); }
+});
+
 router.get('/debug/inventory-raw', authenticate, adminOnly, async (req, res, next) => {
   try {
     const { listPage, createOne, getOne } = require('../utils/bitable');
