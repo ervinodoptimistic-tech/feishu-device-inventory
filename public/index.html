@@ -385,28 +385,35 @@ async function renderInventory() {
       <div style="overflow-x:auto">
       <table id="invTbl">
         <thead><tr>
-          <th>Brand/Model</th><th>IMEI1</th><th>HW Type</th>
-          <th>Location</th><th>Status</th><th>Assigned To</th><th>Return Date</th><th>📷</th><th>Photo</th>
+          <th>Brand / Model</th><th>IMEI1</th><th>HW Type</th>
+          <th>Location</th><th>Status</th><th>Assigned To</th><th>Return By</th><th>📷</th>
         </tr></thead>
         <tbody>${items.length ? items.map(i=>{
-          const f=i.fields||{};
-          const brand=i.brand||fv(f,'Brand')||'—';
-          const model=i.deviceModel||fv(f,'Device Model')||'';
-          const imei1=i.imei1||fv(f,'IMEI1')||'—';
-          const stage=i.hwStage||fv(f,'HW Stage')||'—';
-          const loc=i.warehouseLocation||fv(f,'Warehouse / Location')||'—';
-          const stat=i.deviceStatus||fvs(f,'Device Status')||'—';
-          const asgn=i.assignedTo||fv(f,'Assigned To')||'—';
-          const ret=i.expectedReturnDate||f['Expected Return Date']||null;
+          const brand  = i.brand            || '—';
+          const model  = i.deviceModel      || '';
+          const imei1  = i.imei1            || '—';
+          const hwType = i.sampleHwType     || '—';
+          const loc    = i.warehouseLocation|| '—';
+          const stat   = i.deviceStatus     || '—';
+          const asgn   = i.assignedTo       || i.inventoryHolder || '—';
+          const serial = i.serialNumber     || '';
+          const ret    = i.expectedReturnDate || null;
+          const aDate  = i.assignedDate     || null;
           return `<tr data-status="${stat}">
-            <td><div style="font-weight:500">${brand}</div><div style="font-size:12px;color:#888">${model}</div></td>
+            <td>
+              <div style="font-weight:500">${brand}</div>
+              <div style="font-size:12px;color:#888">${model}</div>
+              ${serial?`<div style="font-size:11px;color:#aaa">S/N: ${serial}</div>`:''}
+            </td>
             <td style="font-family:monospace;font-size:12px">${imei1}</td>
-            <td>${stage||'—'}</td><td>${loc}</td>
-            <td>${statusPill(stat)}</td><td>${asgn}</td>
+            <td><span style="font-size:12px;background:#f0f4ff;padding:2px 8px;border-radius:4px">${hwType}</span></td>
+            <td>${loc}</td>
+            <td>${statusPill(stat)}</td>
+            <td>${asgn}<br><span style="font-size:11px;color:#aaa">${fmtDate(aDate)}</span></td>
             <td>${fmtDate(ret)}</td>
-            <td><button class="btn btn-sm" style="padding:0 8px;height:26px;font-size:13px" title="Upload photo"
+            <td><button class="btn btn-sm" style="padding:0 8px;height:26px;font-size:13px;background:#1a73e8;color:#fff;border:none;border-radius:6px;cursor:pointer" title="Upload photo"
               onclick="showImageUpload('${i.recordId}','inventory')">📷</button></td>
-          </tr>`;}).join('') : '<tr><td colspan="7" class="empty">No devices found</td></tr>'}
+          </tr>`;}).join('') : '<tr><td colspan="8" class="empty">No devices found</td></tr>'}
         </tbody>
       </table>
       </div>
