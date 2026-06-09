@@ -306,9 +306,12 @@ async function bulkUpload(fileBuffer, actorUser, adminEmail, progressCb) {
     const chunkEnd = Math.min(i + CHUNK, toInsert.length);
     progressCb?.(`Inserting records ${i + 1}–${chunkEnd} of ${toInsert.length}...`);
     try {
-      const result = await batchCreate(TABLES.INVENTORY(), chunk.map(toFields));
+      const mappedFields = chunk.map(toFields);
+      // Log first record for debugging
+      console.log('[bulkUpload] Sending', mappedFields.length, 'records. First:', JSON.stringify(mappedFields[0]));
+      const result = await batchCreate(TABLES.INVENTORY(), mappedFields);
+      console.log('[bulkUpload] batchCreate returned', result.length, 'records');
       summary.success += result.length;
-      // If batchCreate returned fewer records than sent, some failed silently
       if (result.length < chunk.length) {
         const missed = chunk.length - result.length;
         summary.failed += missed;
@@ -318,15 +321,14 @@ async function bulkUpload(fileBuffer, actorUser, adminEmail, progressCb) {
         });
       }
     } catch (batchErr) {
-      // batchCreate threw — add ALL rows in this chunk as failed with the real error
       summary.failed += chunk.length;
       const errMsg = batchErr.message || String(batchErr);
+      console.error('[bulkUpload] batchCreate THREW:', errMsg);
       summary.errors.push({
         row: `rows ${i + 2}–${chunkEnd + 1}`,
         reason: `Batch insert error: ${errMsg}`
       });
       progressCb?.(`❌ Batch error: ${errMsg}`);
-      console.error('[bulkUpload] batchCreate error:', errMsg);
     }
   }
 
