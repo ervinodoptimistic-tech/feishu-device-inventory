@@ -26,13 +26,37 @@ const validate = rules => [...rules, (req, res, next) => {
 // ── DEBUG: see raw Bitable fields (Admin only, remove after testing) ──────────
 router.get('/debug/inventory-raw', authenticate, adminOnly, async (req, res, next) => {
   try {
-    const { listPage } = require('../utils/bitable');
+    const { listPage, batchCreate, createOne } = require('../utils/bitable');
+    
+    // 1. Read raw records
     const result = await listPage(TABLES.INVENTORY(), { pageSize: 2 });
-    // Return raw record to see exact field format
+    const rawRecords = result.items.slice(0, 2);
+    
+    // 2. Try a test write to see if fields save correctly
+    let testWrite = null;
+    try {
+      const testRecord = await createOne(TABLES.INVENTORY(), {
+        'Brand':                 'TEST-BRAND',
+        'Device Model':          'TEST-MODEL',
+        'Sample / HW Type':      'PR1',
+        'IMEI1':                 '000000000000001',
+        'Warehouse / Location':  'TEST-LOC',
+        'Inventory Holder':      'TEST-HOLDER',
+        'Upload Batch ID':       'DEBUG-TEST',
+        'Device Status':         'New',
+      });
+      testWrite = { success: true, record: testRecord };
+      // Clean up - note the record_id for manual deletion
+    } catch(e) {
+      testWrite = { success: false, error: e.message };
+    }
+    
     res.json({
       success: true,
-      rawRecords: result.items.slice(0, 2),
-      mappedItems: result.items.slice(0, 2).map(r => invSvc.toDevice ? invSvc.toDevice(r) : r),
+      tableId: TABLES.INVENTORY(),
+      rawRecords,
+      rawFieldsOfFirst: rawRecords[0]?.fields || {},
+      testWrite,
     });
   } catch (err) { next(err); }
 });
