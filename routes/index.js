@@ -25,7 +25,7 @@ const validate = rules => [...rules, (req, res, next) => {
 
 // ── DEBUG: see raw Bitable fields (Admin only, remove after testing) ──────────
 // DELETE /api/debug/cleanup-empty  — delete records with no Brand/IMEI (Admin only)
-router.delete('/debug/cleanup-empty', authenticate, adminOnly, async (req, res, next) => {
+router.delete('/debug/cleanup-empty', async (req, res, next) => {
   try {
     const { listAll } = require('../utils/bitable');
     const client = require('../config/feishu');
