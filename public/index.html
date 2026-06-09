@@ -557,7 +557,14 @@ async function uploadFile(file) {
           try {
             const evt = JSON.parse(line.slice(5).trim());
             if (evt.type === 'progress') updateProgress(evt.message);
-            if (evt.type === 'complete') showUploadResult(evt.summary, res);
+            if (evt.type === 'complete') {
+              // Show duplicate warning immediately
+              if (evt.summary?.duplicates > 0) {
+                const msgEl = document.getElementById('progressMsg');
+                if (msgEl) msgEl.innerHTML = `<span style="color:#b45309">⚠️ ${evt.summary.duplicates} duplicates blocked</span>`;
+              }
+              showUploadResult(evt.summary, res);
+            }
             if (evt.type === 'error') res.innerHTML = `<div class="alert alert-error">${evt.message}</div>`;
           } catch(_) {}
         }
@@ -589,20 +596,32 @@ function showUploadResult(s, res) {
           <div class="stat-card"><div class="stat-label">⚠️ Duplicates</div><div class="stat-value" style="color:#b45309">${s.duplicates}</div></div>
           <div class="stat-card"><div class="stat-label">📋 Missing</div><div class="stat-value" style="color:#888">${s.missingData||0}</div></div>
         </div>
+        ${s.duplicates > 0 ? `
+          <div style="background:#fef3e2;border-radius:8px;padding:12px;margin-bottom:8px;font-size:13px;color:#b45309">
+            ⚠️ <strong>${s.duplicates} duplicate(s) blocked</strong> — IMEI or VC ID already exists in database
+          </div>` : ''}
         ${s.errors?.length ? `
-          <details>
+          <details open>
             <summary style="cursor:pointer;font-size:13px;font-weight:500;color:#c62828;margin-bottom:8px">
-              ⚠️ ${s.errors.length} failed rows — click to view
+              ❌ ${s.errors.length} failed row(s) — click to collapse
             </summary>
-            <div style="overflow:auto;max-height:280px">
-              <table><thead><tr><th>Row</th><th>Reason</th></tr></thead>
-              <tbody>${s.errors.slice(0,200).map(e=>
-                `<tr><td>${e.row}</td><td style="color:#c62828;font-size:12px">${e.reason}</td></tr>`
-              ).join('')}
+            <div style="overflow:auto;max-height:280px;border:1px solid #fce8e6;border-radius:8px">
+              <table><thead><tr>
+                <th style="background:#fce8e6;padding:8px">Row</th>
+                <th style="background:#fce8e6;padding:8px">Reason</th>
+              </tr></thead>
+              <tbody>${s.errors.slice(0,200).map(e=>`
+                <tr style="border-bottom:1px solid #f0f0f0">
+                  <td style="padding:8px;font-weight:500">Row ${e.row}</td>
+                  <td style="padding:8px;color:#c62828;font-size:12px">${e.reason}</td>
+                </tr>`).join('')}
               ${s.errors.length>200?`<tr><td colspan="2" style="color:#888;font-size:12px;padding:8px">...${s.errors.length-200} more rows</td></tr>`:''}
               </tbody></table>
             </div>
-          </details>` : '<p style="color:#137333;font-size:13px">🎉 No errors — all valid rows inserted!</p>'}
+          </details>` : `
+          <div style="background:#e6f4ea;border-radius:8px;padding:12px;font-size:13px;color:#137333">
+            🎉 No errors — all ${s.success} rows inserted successfully!
+          </div>`}
         <button class="btn" style="margin-top:12px" onclick="navigate('inventory')">View Inventory →</button>
       </div>`;
   }, 300);

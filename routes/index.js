@@ -34,8 +34,12 @@ router.delete('/debug/cleanup-empty', async (req, res, next) => {
     const all = await listAll(TABLES.INVENTORY());
     const emptyRecords = all.filter(r => {
       const f = r.fields || {};
-      // Empty if Brand AND IMEI1 AND Device Model are all missing
-      return !f['Brand'] && !f['IMEI1'] && !f['Device Model'];
+      const brand = f['Brand'];
+      const imei1 = f['IMEI1'];
+      // Delete if: no brand, OR test data, OR IMEI is all 1s (test record)
+      const brandStr = typeof brand === 'string' ? brand : (brand?.text || '');
+      const imeiStr  = typeof imei1 === 'string' ? imei1 : (imei1?.text || String(imei1 || ''));
+      return !brandStr || brandStr.startsWith('TEST-') || imeiStr === '111111111111111' || !imeiStr;
     });
 
     const ids = emptyRecords.map(r => r.record_id);
