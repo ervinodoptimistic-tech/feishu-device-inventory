@@ -24,39 +24,52 @@ const validate = rules => [...rules, (req, res, next) => {
 }];
 
 // ── DEBUG: see raw Bitable fields (Admin only, remove after testing) ──────────
-router.get('/debug/inventory-raw', authenticate, adminOnly, async (req, res, next) => {
+router.get('/debug/inventory-raw', async (req, res, next) => {
   try {
-    const { listPage, batchCreate, createOne } = require('../utils/bitable');
+    const { listPage, createOne, getOne } = require('../utils/bitable');
     
-    // 1. Read raw records
-    const result = await listPage(TABLES.INVENTORY(), { pageSize: 2 });
-    const rawRecords = result.items.slice(0, 2);
+    // 1. Get raw records - show actual Feishu field format
+    const result = await listPage(TABLES.INVENTORY(), { pageSize: 3 });
+    const rawRecords = result.items.slice(0, 3);
     
-    // 2. Try a test write to see if fields save correctly
-    let testWrite = null;
+    // 2. Write a test record with createOne and immediately read it back
+    let testResult = null;
+    let createdId = null;
     try {
-      const testRecord = await createOne(TABLES.INVENTORY(), {
-        'Brand':                 'TEST-BRAND',
-        'Device Model':          'TEST-MODEL',
-        'Sample / HW Type':      'PR1',
-        'IMEI1':                 '000000000000001',
-        'Warehouse / Location':  'TEST-LOC',
+      const testFields = {
+        'Brand':                 'TEST-itel',
+        'Device Model':          'TEST-A671N',
+        'IMEI1':                 '111111111111111',
+        'Warehouse / Location':  'TEST-WH',
         'Inventory Holder':      'TEST-HOLDER',
-        'Upload Batch ID':       'DEBUG-TEST',
+        'Assigned Date':         Date.now(),
+        'Upload Batch ID':       'DEBUG-' + Date.now(),
         'Device Status':         'New',
-      });
-      testWrite = { success: true, record: testRecord };
-      // Clean up - note the record_id for manual deletion
+      };
+      const created = await createOne(TABLES.INVENTORY(), testFields);
+      createdId = created.record_id;
+      // Read it back immediately
+      const readBack = await getOne(TABLES.INVENTORY(), createdId);
+      testResult = {
+        success: true,
+        writtenFields: testFields,
+        createdRecord: created,
+        readBackFields: readBack?.fields || {},
+        brand_match: readBack?.fields?.['Brand'] ? 'YES - fields work!' : 'NO - fields empty!',
+      };
     } catch(e) {
-      testWrite = { success: false, error: e.message };
+      testResult = { success: false, error: e.message };
     }
     
     res.json({
       success: true,
       tableId: TABLES.INVENTORY(),
-      rawRecords,
-      rawFieldsOfFirst: rawRecords[0]?.fields || {},
-      testWrite,
+      appToken: process.env.BITABLE_APP_TOKEN,
+      existingRawFields: rawRecords[0]?.fields || {},
+      existingMapped: rawRecords[0] ? require('../services/inventoryService').toDevice(rawRecords[0]) : {},
+      testWriteAndRead: testResult,
+      testRecordId: createdId,
+      message: createdId ? 'IMPORTANT: Delete test record ' + createdId + ' from Bitable manually' : '',
     });
   } catch (err) { next(err); }
 });
