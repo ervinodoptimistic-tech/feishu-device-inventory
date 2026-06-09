@@ -66,6 +66,64 @@ router.delete('/debug/cleanup-empty', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /debug/test-row3 - test inserting rows 3-6 from Book1.xlsx via batchCreate wrapper
+router.get('/debug/test-row3', async (req, res, next) => {
+  try {
+    const { batchCreate } = require('../utils/bitable');
+    const XLSX = require('xlsx');
+
+    // Simulate EXACTLY what inventoryService would produce for rows 3-6
+    // Using the same parseDate and toFields logic
+    function parseDate(val) {
+      if (!val) return null;
+      const s = String(val).trim();
+      if (!s) return null;
+      const d = new Date(s);
+      return isNaN(d) ? null : d.getTime();
+    }
+
+    const rows3to6 = [
+      { brand:'Tecno',   deviceModel:'AD9',   sampleHwType:'PR1',   imei1:'911618450003840', imei2:'911618450006801', vcId:'', color:'Red',   storageRamVariant:'16GB',     warehouseLocation:'Gudeep', inventoryHolder:'Gurdeep',   assignedTo:'Gudeep',  assignedDate:parseDate('1/11/2024'), deviceStatus:'Assigned', uploadBatchId:'TEST-ROWS36' },
+      { brand:'Infinix', deviceModel:'X6891',  sampleHwType:'PR1-1', imei1:'911627650007667', imei2:'911627650007731', vcId:'', color:'Pink',  storageRamVariant:'8+128GB',  warehouseLocation:'Pankaj', inventoryHolder:'Gurdeep',   assignedTo:'Pankaj',  assignedDate:parseDate('3/3/2023'),  deviceStatus:'Assigned', uploadBatchId:'TEST-ROWS36' },
+      { brand:'Villaon', deviceModel:'V671N',  sampleHwType:'PIR',   imei1:'911639250020420', imei2:'911639250026382', vcId:'', color:'Black', storageRamVariant:'12+512GB', warehouseLocation:'Jithin', inventoryHolder:'Shane Alam', assignedTo:'Jithin',  assignedDate:parseDate('12/4/2022'), deviceStatus:'Assigned', uploadBatchId:'TEST-ROWS36' },
+      { brand:'Tecno',   deviceModel:'CN7c',   sampleHwType:'MPR',   imei1:'911639250011304', imei2:'911639250009746', vcId:'', color:'Blue',  storageRamVariant:'16+256GB', warehouseLocation:'rahul',  inventoryHolder:'Shane Alam', assignedTo:'Rahul',   assignedDate:parseDate('4/3/2026'),  deviceStatus:'Assigned', uploadBatchId:'TEST-ROWS36' },
+    ];
+
+    function toFieldsTest(data) {
+      const f = {};
+      if (data.brand)             f['Brand']                 = data.brand;
+      if (data.deviceModel)       f['Device Model']          = data.deviceModel;
+      if (data.sampleHwType)      f['Sample / HW Type']      = data.sampleHwType;
+      if (data.imei1)             f['IMEI1']                  = String(data.imei1);
+      if (data.imei2)             f['IMEI2']                  = String(data.imei2);
+      if (data.color)             f['Color']                  = data.color;
+      if (data.storageRamVariant) f['Storage / RAM Variant']  = data.storageRamVariant;
+      if (data.warehouseLocation) f['Warehouse / Location']   = data.warehouseLocation;
+      if (data.inventoryHolder)   f['Inventory Holder']       = data.inventoryHolder;
+      if (data.assignedTo)        f['Assigned To']            = data.assignedTo;
+      if (data.uploadBatchId)     f['Upload Batch ID']        = data.uploadBatchId;
+      if (data.deviceStatus)      f['Device Status']          = data.deviceStatus;
+      if (data.assignedDate)      f['Assigned Date']          = data.assignedDate;
+      return f;
+    }
+
+    const fieldsArray = rows3to6.map(toFieldsTest);
+    let result = null, err = null;
+    try {
+      result = await batchCreate(TABLES.INVENTORY(), fieldsArray);
+    } catch(e) { err = e.message; }
+
+    res.json({
+      success: true,
+      fieldsSent: fieldsArray,
+      resultCount: result?.length,
+      firstInserted: result?.[0],
+      error: err,
+      verdict: (result?.length === 4) ? '✅ ALL 4 INSERTED' : `❌ Only ${result?.length||0}/4 inserted`,
+    });
+  } catch(e2) { next(e2); }
+});
+
 // GET /debug/test-batch2 - test batchCreate using EXACT same wrapper as inventoryService
 router.get('/debug/test-batch2', async (req, res, next) => {
   try {
