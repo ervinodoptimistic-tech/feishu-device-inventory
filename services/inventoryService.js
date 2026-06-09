@@ -44,7 +44,7 @@ const COLUMN_ALIASES = {
  */
 function buildColumnMap(excelHeaders) {
   const map = {}; // canonical → actual excel header
-  const normalise = s => String(s || '').toLowerCase().trim().replace(/\s+/g, ' ');
+  const normalise = s => String(s || '').toLowerCase().trim().replace(/\s+/g, ' ').replace(/\s*\*+\s*$/, '').trim();
 
   for (const [canonical, aliases] of Object.entries(COLUMN_ALIASES)) {
     for (const header of excelHeaders) {
@@ -184,6 +184,8 @@ async function bulkUpload(fileBuffer, actorUser, adminEmail, progressCb) {
   progressCb?.(`Detected ${excelHeaders.length} columns. Mapping: ${Object.keys(colMap).join(', ')}`);
 
   // Warn if mandatory columns are missing
+  // Log column map for debugging
+  progressCb?.(`Column mapping: ${JSON.stringify(colMap)}`);
   const missingCols = MANDATORY.filter(m => !colMap[m]);
   if (missingCols.length > 0) {
     summary.errors.push({
