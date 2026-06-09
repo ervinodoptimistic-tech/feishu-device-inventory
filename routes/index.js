@@ -66,6 +66,65 @@ router.delete('/debug/cleanup-empty', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /debug/test-batch2 - test batchCreate using EXACT same wrapper as inventoryService
+router.get('/debug/test-batch2', async (req, res, next) => {
+  try {
+    const { batchCreate } = require('../utils/bitable');
+
+    // Simulate EXACTLY what inventoryService sends via toFields()
+    const testData = [
+      {
+        brand: 'itel', deviceModel: 'A671N', sampleHwType: 'PR0',
+        imei1: '911589200003028', imei2: '911565700029945',
+        vcId: '552706', color: 'Blue', storageRamVariant: '8GB',
+        warehouseLocation: 'Inventory', inventoryHolder: 'Shane Alam',
+        assignedTo: 'Inventory', assignedDate: new Date('2025-12-02').getTime(),
+        deviceStatus: 'Assigned', uploadBatchId: 'TEST-WRAPPER-' + Date.now(),
+        serialNumber: '', remarks: '',
+      }
+    ];
+
+    // Use the EXACT toFields function from inventoryService
+    const invSvc = require('../services/inventoryService');
+    // Access toFields via a test - call bulkUpload with a tiny test
+    // Instead, inline toFields logic here to test
+    function toFieldsTest(data) {
+      const f = {};
+      if (data.brand)             f['Brand']                 = data.brand;
+      if (data.deviceModel)       f['Device Model']          = data.deviceModel;
+      if (data.sampleHwType)      f['Sample / HW Type']      = data.sampleHwType;
+      if (data.imei1)             f['IMEI1']                  = String(data.imei1);
+      if (data.imei2)             f['IMEI2']                  = String(data.imei2);
+      if (data.vcId)              f['VC ID']                  = String(data.vcId);
+      if (data.color)             f['Color']                  = data.color;
+      if (data.storageRamVariant) f['Storage / RAM Variant']  = data.storageRamVariant;
+      if (data.warehouseLocation) f['Warehouse / Location']   = data.warehouseLocation;
+      if (data.inventoryHolder)   f['Inventory Holder']       = data.inventoryHolder;
+      if (data.assignedTo)        f['Assigned To']            = data.assignedTo;
+      if (data.uploadBatchId)     f['Upload Batch ID']        = data.uploadBatchId;
+      if (data.deviceStatus)      f['Device Status']          = data.deviceStatus;
+      if (data.assignedDate)      f['Assigned Date']          = data.assignedDate;
+      return f;
+    }
+
+    const fieldsArray = testData.map(toFieldsTest);
+    let result = null;
+    let err = null;
+    try {
+      result = await batchCreate(TABLES.INVENTORY(), fieldsArray);
+    } catch(e) { err = e.message; }
+
+    res.json({
+      success: true,
+      fieldsWeSent: fieldsArray,
+      batchCreateResult: result,
+      resultLength: result?.length,
+      error: err,
+      verdict: result?.length > 0 ? '✅ WORKS' : '❌ FAILED - batchCreate returned 0 records',
+    });
+  } catch(err2) { next(err2); }
+});
+
 // GET /debug/test-batch - test batchCreate with 2 records
 router.get('/debug/test-batch', async (req, res, next) => {
   try {
