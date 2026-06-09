@@ -34,12 +34,19 @@ router.delete('/debug/cleanup-empty', async (req, res, next) => {
     const all = await listAll(TABLES.INVENTORY());
     const emptyRecords = all.filter(r => {
       const f = r.fields || {};
-      const brand = f['Brand'];
-      const imei1 = f['IMEI1'];
-      // Delete if: no brand, OR test data, OR IMEI is all 1s (test record)
-      const brandStr = typeof brand === 'string' ? brand : (brand?.text || '');
-      const imeiStr  = typeof imei1 === 'string' ? imei1 : (imei1?.text || String(imei1 || ''));
-      return !brandStr || brandStr.startsWith('TEST-') || imeiStr === '111111111111111' || !imeiStr;
+      const brand     = typeof f['Brand'] === 'string' ? f['Brand'] : (f['Brand']?.text || '');
+      const imei1     = typeof f['IMEI1'] === 'string' ? f['IMEI1'] : (f['IMEI1']?.text || String(f['IMEI1'] || ''));
+      const batchId   = typeof f['Upload Batch ID'] === 'string' ? f['Upload Batch ID'] : (f['Upload Batch ID']?.text || '');
+      const model     = typeof f['Device Model'] === 'string' ? f['Device Model'] : (f['Device Model']?.text || '');
+      // Delete test/debug records only
+      return brand.startsWith('TEST-')
+          || imei1.startsWith('111222333444')
+          || imei1 === '000000000000001'
+          || imei1 === '111111111111111'
+          || batchId.startsWith('DEBUG-')
+          || batchId.startsWith('BATCH-DEBUG')
+          || model.startsWith('BATCH-TEST')
+          || model.startsWith('TEST-');
     });
 
     const ids = emptyRecords.map(r => r.record_id);
@@ -404,6 +411,28 @@ router.post('/inventory/bulk-upload', authenticate, adminOrHolder, upload.single
       send('error', { success: false, message: err.message });
     }
     res.end();
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/inventory/:id  (Admin/InventoryHolder — cannot delete Assigned devices)
+router.delete('/inventory/:id', authenticate, adminOnly, async (req, res, next) => {
+  try {
+    const device = await invSvc.getDevice(req.params.id);
+    if (!device) return res.status(404).json({ success: false, message: 'Device not found' });
+    if (device.deviceStatus === 'Assigned') {
+      return res.status(400).json({ success: false, message: 'Cannot delete an Assigned device. Return it first.' });
+    }
+    const client = require('../config/feishu');
+    const { APP_TOKEN } = require('../config/constants');
+    await client.bitable.appTableRecord.delete({
+      path: { app_token: APP_TOKEN(), table_id: TABLES.INVENTORY(), record_id: req.params.id },
+    });
+    const { log } = require('../services/auditService');
+    await log({ ...req.user, action: 'StatusChange', entityType: 'Inventory', entityId: req.params.id,
+      prevValue: { brand: device.brand, model: device.deviceModel, imei1: device.imei1 },
+      newValue: { action: 'Deleted' }
+    });
+    res.json({ success: true, message: `${device.brand} ${device.deviceModel} deleted` });
   } catch (err) { next(err); }
 });
 

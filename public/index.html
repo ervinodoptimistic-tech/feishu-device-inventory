@@ -391,6 +391,7 @@ async function renderInventory() {
         <thead><tr>
           <th>Brand / Model</th><th>IMEI1</th><th>HW Type</th>
           <th>Location</th><th>Status</th><th>Assigned To</th><th>Return By</th><th>📷</th>
+          ${USER.role==='Admin'?'<th>Del</th>':''}
         </tr></thead>
         <tbody>${items.length ? items.map(i=>{
           const brand  = i.brand || i._rawBrand?.text || (Array.isArray(i._rawBrand) ? i._rawBrand[0]?.text : '') || String(i._rawBrand||'') || '—';
@@ -417,6 +418,9 @@ async function renderInventory() {
             <td>${fmtDate(ret)}</td>
             <td><button class="btn btn-sm" style="padding:0 8px;height:26px;font-size:13px;background:#1a73e8;color:#fff;border:none;border-radius:6px;cursor:pointer" title="Upload photo"
               onclick="showImageUpload('${i.recordId}','inventory')">📷</button></td>
+            ${USER.role==='Admin'?`
+            <td><button class="btn btn-sm btn-danger" style="padding:0 8px;height:26px;font-size:13px" title="Delete record"
+              onclick="deleteInventory('${i.recordId}','${brand} ${model}','${stat}')">🗑️</button></td>`:''}
           </tr>`;}).join('') : '<tr><td colspan="8" class="empty">No devices found</td></tr>'}
         </tbody>
       </table>
@@ -1785,7 +1789,47 @@ async function doUploadImg(endpoint) {
   }
 }
 
-// ── Router ────────────────────────────────────────────────────────────────────────────
+// ── Delete Inventory Record ──────────────────────────────────────────────────
+async function deleteInventory(recordId, deviceName, status) {
+  // Block deletion of assigned devices
+  if (status === 'Assigned') {
+    alert('❌ Cannot delete an Assigned device.\nPlease ensure the device is returned first before deleting.');
+    return;
+  }
+  const confirmed = confirm(`🗑️ Delete this device?\n\n${deviceName}\n\nThis cannot be undone. The audit log will record this deletion.`);
+  if (!confirmed) return;
+
+  try {
+    const d = await req('DELETE', `/api/inventory/${recordId}`);
+    if (d.success) {
+      clearCache('/api/inventory');
+      clearCache('/api/inventory/dashboard');
+      // Remove row from table without full reload
+      const rows = document.querySelectorAll('#invTbl tbody tr');
+      rows.forEach(row => {
+        if (row.innerHTML.includes(recordId)) row.remove();
+      });
+      // Update count
+      const title = document.querySelector('.table-title');
+      if (title) {
+        const current = parseInt(title.textContent.match(/\d+/)?.[0] || '0');
+        title.textContent = `📋 Inventory (${current - 1})`;
+      }
+      // Show toast
+      const toast = document.createElement('div');
+      toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#c62828;color:#fff;padding:12px 24px;border-radius:8px;font-size:13px;z-index:9999;font-weight:500';
+      toast.textContent = `🗑️ ${deviceName} deleted`;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    } else {
+      alert(d.message || 'Delete failed');
+    }
+  } catch(e) {
+    alert('Delete failed: ' + e.message);
+  }
+}
+
+// ── Router ────────────────────────────────────────────────────────────────────────────────
 function renderPage(page) {
   const routes = {
     dashboard:   renderDashboard,
