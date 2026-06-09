@@ -92,6 +92,11 @@ function toDevice(record) {
     uploadBatchId:      fieldText(f['Upload Batch ID'])    || '',
     remarks:            fieldText(f['Remarks'])            || '',
     createdAt:          f['Created At']                    || null,
+    // Keep raw fields for debugging display issues
+    _rawBrand:          f['Brand'],
+    _rawModel:          f['Device Model'],
+    _rawImei1:          f['IMEI1'],
+    _rawStatus:         f['Device Status'],
   };
 }
 

@@ -23,6 +23,20 @@ const validate = rules => [...rules, (req, res, next) => {
   next();
 }];
 
+// ── DEBUG: see raw Bitable fields (Admin only, remove after testing) ──────────
+router.get('/debug/inventory-raw', authenticate, adminOnly, async (req, res, next) => {
+  try {
+    const { listPage } = require('../utils/bitable');
+    const result = await listPage(TABLES.INVENTORY(), { pageSize: 2 });
+    // Return raw record to see exact field format
+    res.json({
+      success: true,
+      rawRecords: result.items.slice(0, 2),
+      mappedItems: result.items.slice(0, 2).map(r => invSvc.toDevice ? invSvc.toDevice(r) : r),
+    });
+  } catch (err) { next(err); }
+});
+
 // ════════════════════════════════════════════════════════════════════════════
 // AUTH
 // ════════════════════════════════════════════════════════════════════════════

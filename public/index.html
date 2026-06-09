@@ -368,6 +368,10 @@ async function renderInventory() {
   const path = `/api/inventory?pageSize=100${assignedTo?'&assignedTo='+assignedTo:''}`;
   const d = await cachedReq(path, 30000);
   const items = d.items || [];
+  // Debug: log first item to console to see what fields are returned
+  if (items.length > 0) {
+    console.log('[Inventory Debug] First item:', JSON.stringify(items[0], null, 2));
+  }
   show(`
     <div class="table-wrap">
       <div class="table-header">
@@ -389,12 +393,12 @@ async function renderInventory() {
           <th>Location</th><th>Status</th><th>Assigned To</th><th>Return By</th><th>📷</th>
         </tr></thead>
         <tbody>${items.length ? items.map(i=>{
-          const brand  = i.brand            || '—';
-          const model  = i.deviceModel      || '';
-          const imei1  = i.imei1            || '—';
+          const brand  = i.brand || i._rawBrand?.text || (Array.isArray(i._rawBrand) ? i._rawBrand[0]?.text : '') || String(i._rawBrand||'') || '—';
+          const model  = i.deviceModel || i._rawModel?.text || (Array.isArray(i._rawModel) ? i._rawModel[0]?.text : '') || String(i._rawModel||'') || '';
+          const imei1  = i.imei1 || i._rawImei1?.text || (Array.isArray(i._rawImei1) ? i._rawImei1[0]?.text : '') || String(i._rawImei1||'') || '—';
           const hwType = i.sampleHwType     || '—';
           const loc    = i.warehouseLocation|| '—';
-          const stat   = i.deviceStatus     || '—';
+          const stat   = i.deviceStatus || i._rawStatus?.text || (Array.isArray(i._rawStatus) ? i._rawStatus[0]?.text : '') || '—';
           const asgn   = i.assignedTo       || i.inventoryHolder || '—';
           const serial = i.serialNumber     || '';
           const ret    = i.expectedReturnDate || null;
